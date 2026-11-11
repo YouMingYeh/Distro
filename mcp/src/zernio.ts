@@ -12,32 +12,30 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-/** One Zernio profile per workspace, created on first use. */
-async function profileId(workspaceId: string): Promise<string> {
-  const key = `ws:${workspaceId}`;
-  const known = await env.OAUTH_KV.get(key);
-  if (known) return known;
+/** Creates the Zernio profile that backs one Distro profile. `externalId` is the Distro profile id. */
+export async function createZernioProfile(externalId: string): Promise<string> {
   const { profile } = await call<{ profile: { _id: string } }>("/profiles", {
     method: "POST",
-    body: JSON.stringify({ name: `distro-${workspaceId.slice(0, 8)}`, externalId: workspaceId }),
+    body: JSON.stringify({ name: `distro-${externalId}`, externalId }),
   });
-  await env.OAUTH_KV.put(key, profile._id);
   return profile._id;
 }
 
-export async function connectUrl(workspaceId: string, platform: Platform, origin: string): Promise<string> {
-  const query = new URLSearchParams({
-    profileId: await profileId(workspaceId),
-    redirect_url: `${origin}/connect/callback?platform=${platform}`,
-  });
+/** Zernio refuses while the profile still has active accounts; that error reaches the caller. */
+export async function deleteZernioProfile(zernioId: string): Promise<void> {
+  await call(`/profiles/${zernioId}`, { method: "DELETE" });
+}
+
+export async function connectUrl(zernioId: string, platform: Platform, origin: string): Promise<string> {
+  const query = new URLSearchParams({ profileId: zernioId, redirect_url: `${origin}/connect/callback?platform=${platform}` });
   const { authUrl } = await call<{ authUrl: string }>(`/connect/${platform}?${query}`);
   return authUrl;
 }
 
 type Account = { _id: string; platform: string; username?: string; isActive?: boolean };
 
-export async function listAccounts(workspaceId: string) {
-  const { accounts } = await call<{ accounts: Account[] }>(`/accounts?profileId=${await profileId(workspaceId)}`);
+export async function listAccounts(zernioId: string) {
+  const { accounts } = await call<{ accounts: Account[] }>(`/accounts?profileId=${zernioId}`);
   return accounts.map((a) => ({ account_id: a._id, platform: a.platform, username: a.username, active: a.isActive }));
 }
 

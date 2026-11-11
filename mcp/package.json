@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --env-file .env.development --local-upstream localhost:8787 --upstream-protocol http",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "secrets": "wrangler secret bulk .env.production",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/scrapers.test.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^1.2.4",

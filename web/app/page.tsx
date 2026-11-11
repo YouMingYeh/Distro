@@ -25,6 +25,17 @@ const TOOLS = [
     ],
   },
   {
+    group: "Research",
+    tools: [
+      ["find_viral_videos", "The most-viewed recent TikToks, Reels or Shorts on a topic, merged from several scraper services."],
+      ["get_video_hook", "The spoken hook and full transcript of a TikTok video."],
+      ["scrape_page", "Any public page as markdown, through Firecrawl, Jina, Tavily or Exa."],
+      ["web_search", "Web results with titles, URLs and snippets."],
+      ["connect_darkugc", "Returns a sign-in link for the user's own DarkUGC account."],
+      ["darkugc_call", "Top hooks, trends and niche breakdowns from the DarkUGC library."],
+    ],
+  },
+  {
     group: "Publish",
     tools: [["publish", "Posts a video to linked accounts, now or on a schedule. Dry-run unless told otherwise."]],
   },
@@ -138,7 +149,7 @@ POST /oauth/register
 GET  /authorize?response_type=code
        &code_challenge=...&code_challenge_method=S256
        &resource=${BASE}
-       &scope=accounts video publish
+       &scope=accounts video research publish
 POST /oauth/token
 
 POST /mcp
@@ -216,7 +227,7 @@ export default function Page({ searchParams }: PageProps<"/">) {
           <p className="mt-4 max-w-[60ch] text-muted">
             Each tool does one job and returns structured JSON. Every call is scoped to the workspace that authorized it.
           </p>
-          <div className="mt-12 grid gap-4 md:grid-cols-[1fr_1.5fr_1fr]">
+          <div className="mt-12 grid gap-4 md:grid-cols-2">
             {TOOLS.map(({ group, tools }, i) => (
               <div key={group} className={`rounded-xl p-6 ${i === 1 ? "bg-fg text-bg" : "border border-line bg-surface"}`}>
                 <h3 className="text-sm font-medium">{group}</h3>
@@ -281,7 +292,7 @@ export default function Page({ searchParams }: PageProps<"/">) {
           <div className={`${shell} py-20 md:py-28`}>
             <h2 className="text-4xl font-semibold tracking-tighter md:text-6xl">Add one URL.</h2>
             <p className="mt-4 max-w-[52ch] text-muted">
-              Works with any client that speaks MCP over Streamable HTTP. Your agent opens a consent page on first use.
+              Works with any client that speaks MCP over Streamable HTTP. On first use your agent opens a page where you sign in, with Google if you like, and approve.
             </p>
             <div className="mt-10 flex max-w-3xl items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 pl-5">
               <code className="min-w-0 overflow-x-auto whitespace-nowrap font-mono text-sm">{INSTALL}</code>

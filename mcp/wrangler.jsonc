@@ -6,10 +6,17 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "routes": [{ "pattern": "mcp.trydistro.app", "custom_domain": true }],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "20d13cc195d44367af6908ed784ae6e6" }],
-  // Production values. Local dev overrides both in .dev.vars:
+  // Production values. Local dev (`pnpm dev`) reads .env.development instead:
   //   ORIGIN=http://localhost:8787
   //   WEB_ORIGIN=http://localhost:3000
-  // Secret (wrangler secret put): ZERNIO_API_KEY
+  // Secrets live in .env.production (gitignored) and go up with `pnpm secrets`: ZERNIO_API_KEY
+  // Sign-in (Clerk, with Google): CLERK_ISSUER, CLERK_OAUTH_CLIENT_ID, CLERK_OAUTH_CLIENT_SECRET.
+  //   The Clerk OAuth app's redirect URI is <ORIGIN>/callback. Unset means no sign-in: a
+  //   workspace is just a browser cookie.
+  // Scrapers, each optional; find_viral_videos uses whichever are set:
+  //   SCRAPECREATORS_API_KEY, BYCRAWL_API_KEY, OMNISCRAPE_API_KEY, ENSEMBLEDATA_TOKEN, APIFY_TOKEN
+  // Page scrapers, each optional; scrape_page and web_search try them in this order:
+  //   FIRECRAWL_API_KEY, JINA_API_KEY, TAVILY_API_KEY, EXA_API_KEY
   "vars": {
     "ORIGIN": "https://mcp.trydistro.app",
     "WEB_ORIGIN": "https://trydistro.app"

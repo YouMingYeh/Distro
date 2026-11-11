@@ -1,18 +1,104 @@
 import { AuthorizationError, CimdFetchError, type ConsentDescription } from "@cloudflare/workers-oauth-provider";
 import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
+import { useProfile } from "./profiles";
+import { darkugcCallback } from "./darkugc";
 import { connectUrl } from "./zernio";
 
 const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-// ponytail: a workspace is an unguessable id in an HttpOnly cookie, so there is no sign-in.
-// The same browser gets the same workspace for every agent it authorizes. Ceiling: no access
-// from a second browser or device. Upgrade path: put a real login in front of workspace().
+// A workspace belongs to a signed-in user. Sign-in is Clerk (the "Distro Worker" OAuth app),
+// which is where the Google button lives. KV maps user:<clerk user id> to the workspace id, and
+// the cookie holds a random session id that KV maps to that workspace. Social accounts, profiles
+// and DarkUGC tokens all hang off the workspace id, so they follow the user to any browser.
+// Without CLERK_ISSUER (self-host without Clerk) there is no sign-in and the cookie value itself
+// is the workspace.
 const COOKIE = "__Host-distro-ws";
-function workspace(req: Request): { id: string; setCookie?: string } {
-  const found = req.headers.get("Cookie")?.match(new RegExp(`${COOKIE}=([0-9a-f-]{36})`))?.[1];
-  if (found) return { id: found };
-  const id = crypto.randomUUID();
-  return { id, setCookie: `${COOKIE}=${id}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=31536000` };
+const STATE = "__Host-distro-st";
+const YEAR = 31536000;
+const signInRedirect = () => `${env.ORIGIN}/callback`; // registered on the Clerk OAuth app
+const cookie = (req: Request, name: string) =>
+  req.headers.get("Cookie")?.match(new RegExp(`(?:^|; )${name}=([0-9a-f-]{36})(?:;|$)`))?.[1];
+const setCookie = (name: string, value: string, maxAge: number) =>
+  `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+
+type Who = { id: string; email?: string; setCookie?: string };
+
+/** The signed-in workspace, or null when this browser has to sign in first. */
+async function workspace(req: Request): Promise<Who | null> {
+  const found = cookie(req, COOKIE);
+  if (!env.CLERK_ISSUER) {
+    if (found) return { id: found };
+    const id = crypto.randomUUID();
+    return { id, setCookie: setCookie(COOKIE, id, YEAR) };
+  }
+  const session = found ? await env.OAUTH_KV.get<{ ws: string; email?: string }>(`session:${found}`, "json") : null;
+  return session ? { id: session.ws, email: session.email } : null;
+}
+
+/** Sends the browser to sign in and remembers where it was going. */
+async function signIn(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const state = crypto.randomUUID();
+  // `legacy` is the pre-sign-in cookie workspace, if any, so its connected accounts are kept.
+  const pending = { returnTo: url.pathname + url.search, legacy: cookie(req, COOKIE) };
+  await env.OAUTH_KV.put(`signin:${state}`, JSON.stringify(pending), { expirationTtl: 600 });
+  const to = new URL(`${env.CLERK_ISSUER}/oauth/authorize`);
+  to.search = new URLSearchParams({
+    client_id: env.CLERK_OAUTH_CLIENT_ID ?? "",
+    redirect_uri: signInRedirect(),
+    response_type: "code",
+    scope: "email profile",
+    state,
+  }).toString();
+  return new Response(null, { status: 302, headers: { Location: to.toString(), "Set-Cookie": setCookie(STATE, state, 600) } });
+}
+
+/** Clerk returns here. Starts a session for the user's workspace and resumes what was interrupted. */
+async function signInCallback(req: Request): Promise<Response> {
+  const fail = (why: string) =>
+    new Response(page("Sign-in failed", `<h1>Sign-in failed</h1><p>${esc(why)}</p>`), {
+      status: 400,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  const url = new URL(req.url);
+  const state = url.searchParams.get("state");
+  const code = url.searchParams.get("code");
+  // The state must match this browser's cookie, so a link made in another browser cannot sign this one in.
+  if (!state || !code || state !== cookie(req, STATE)) return fail("The sign-in expired or was cancelled. Start again.");
+  const pending = await env.OAUTH_KV.get<{ returnTo: string; legacy?: string }>(`signin:${state}`, "json");
+  if (!pending) return fail("The sign-in expired. Start again.");
+  await env.OAUTH_KV.delete(`signin:${state}`); // single use
+
+  const tokenRes = await fetch(`${env.CLERK_ISSUER}/oauth/token`, {
+    method: "POST",
+    body: new URLSearchParams({
+      code,
+      client_id: env.CLERK_OAUTH_CLIENT_ID ?? "",
+      client_secret: env.CLERK_OAUTH_CLIENT_SECRET ?? "",
+      redirect_uri: signInRedirect(),
+      grant_type: "authorization_code",
+    }),
+  });
+  const { access_token } = (await tokenRes.json().catch(() => ({}))) as { access_token?: string };
+  if (!tokenRes.ok || !access_token) return fail("The sign-in could not be confirmed.");
+  const userRes = await fetch(`${env.CLERK_ISSUER}/oauth/userinfo`, { headers: { Authorization: `Bearer ${access_token}` } });
+  const user = (await userRes.json().catch(() => ({}))) as { sub?: string; user_id?: string; email?: string };
+  const userId = user.sub ?? user.user_id;
+  if (!userRes.ok || !userId) return fail("The sign-in could not be confirmed.");
+
+  // ponytail: read then write on KV. Two first sign-ins of one user within KV's propagation
+  // window can create two workspaces. Move the user map to D1 if that ever shows up.
+  let ws = await env.OAUTH_KV.get(`user:${userId}`);
+  if (!ws) {
+    ws = pending.legacy ?? crypto.randomUUID();
+    await env.OAUTH_KV.put(`user:${userId}`, ws);
+  }
+  const session = crypto.randomUUID();
+  await env.OAUTH_KV.put(`session:${session}`, JSON.stringify({ ws, email: user.email }), { expirationTtl: YEAR });
+  const headers = new Headers({ Location: pending.returnTo });
+  headers.append("Set-Cookie", setCookie(COOKIE, session, YEAR));
+  headers.append("Set-Cookie", setCookie(STATE, "", 0));
+  return new Response(null, { status: 302, headers });
 }
 
 function page(title: string, body: string): string {
@@ -32,7 +118,7 @@ button[value=approve]{background:var(--fg);color:var(--bg);border-color:var(--fg
 </style><main>${body}</main></html>`;
 }
 
-function consentPage(d: ConsentDescription, handle: string): string {
+function consentPage(d: ConsentDescription, handle: string, email?: string): string {
   const requested = d.scope.filter((s): s is Scope => s in SCOPES);
   const shown = requested.length ? requested : (Object.keys(SCOPES) as Scope[]);
   const name = esc(d.clientName || "An app");
@@ -42,6 +128,7 @@ function consentPage(d: ConsentDescription, handle: string): string {
 <p>${d.clientDomain ? `Published by <strong>${esc(d.clientDomain)}</strong>.` : "This app registered itself; its name is not verified."}
 Access will be sent to <strong>${esc(d.redirectHost)}</strong>.</p>
 ${d.redirectIsLoopback ? "<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started connecting from it.</p>" : ""}
+${email ? `<p>Signed in as <strong>${esc(email)}</strong>.</p>` : ""}
 <form method="post">
 <input type="hidden" name="handle" value="${esc(handle)}">
 ${d.scope.includes("offline_access") ? '<input type="hidden" name="scope" value="offline_access">' : ""}
@@ -55,13 +142,19 @@ async function authorize(req: Request): Promise<Response> {
   const oauth = env.OAUTH_PROVIDER;
   try {
     if (req.method === "POST") {
+      const ws = await workspace(req);
+      if (!ws) {
+        return new Response(page("Signed out", "<h1>You were signed out</h1><p>Start connecting again from your agent.</p>"), {
+          status: 401,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
       const form = await req.formData();
       const handle = String(form.get("handle"));
       if (form.get("decision") !== "approve") {
         return new Response(null, { status: 302, headers: (await oauth.denyConsent(req, handle)).headers });
       }
       const approved = await oauth.approveConsent(req, handle, { scope: form.getAll("scope").map(String) });
-      const ws = workspace(req);
       const scopes = approved.request.scope;
       const { redirectTo } = await oauth.completeAuthorization({
         request: approved.request, // from storage, not from the form
@@ -75,10 +168,12 @@ async function authorize(req: Request): Promise<Response> {
       return new Response(null, { status: 302, headers: approved.headers });
     }
     const request = await oauth.parseAuthRequest(req);
+    const who = await workspace(req);
+    if (!who) return signIn(req); // comes back to this same URL once signed in
     const details = await oauth.describeConsent(request);
     const consent = await oauth.beginConsent(request);
     consent.headers.set("Content-Type", "text/html; charset=utf-8");
-    return new Response(consentPage(details, consent.handle), { headers: consent.headers });
+    return new Response(consentPage(details, consent.handle, who.email), { headers: consent.headers });
   } catch (error) {
     if (error instanceof AuthorizationError && error.redirectTo) return Response.redirect(error.redirectTo, 302);
     if (error instanceof AuthorizationError || error instanceof CimdFetchError) {
@@ -95,10 +190,13 @@ async function authorize(req: Request): Promise<Response> {
 /** Browser door for the site's Connect buttons: same workspace cookie, same Zernio flow as the tool. */
 async function connectStart(req: Request, platform: string): Promise<Response> {
   if (!isPlatform(platform)) return new Response("Unknown platform", { status: 404 });
-  const ws = workspace(req);
+  const ws = await workspace(req);
+  if (!ws) return signIn(req);
   let location: string;
   try {
-    location = await connectUrl(ws.id, platform, new URL(req.url).origin);
+    const url = new URL(req.url);
+    const profile = await useProfile(ws.id, url.searchParams.get("profile") ?? undefined);
+    location = await connectUrl(profile.zernioId, platform, url.origin);
   } catch {
     location = `${env.WEB_ORIGIN}/?error=connect_unavailable`;
   }
@@ -122,11 +220,26 @@ function connectCallback(url: URL): Response {
   return Response.redirect(to.toString(), 302);
 }
 
+/** DarkUGC returns the browser here after its own sign-in and consent. */
+async function darkugcReturn(url: URL): Promise<Response> {
+  let body = "<h1>DarkUGC connected</h1><p>You can close this tab and go back to your agent.</p>";
+  let status = 200;
+  try {
+    await darkugcCallback(url);
+  } catch (e) {
+    status = 400;
+    body = `<h1>DarkUGC was not connected</h1><p>${esc(e instanceof Error ? e.message : "Sign-in failed.")}</p>`;
+  }
+  return new Response(page("DarkUGC", body), { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
 export const authHandler = {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/authorize") return authorize(req);
+    if (url.pathname === "/callback" && env.CLERK_ISSUER) return signInCallback(req);
     if (url.pathname === "/connect/callback") return connectCallback(url);
+    if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
     const platform = url.pathname.match(/^\/connect\/([a-z]+)$/)?.[1];
     if (platform && req.method === "GET") return connectStart(req, platform);
     if (url.pathname === "/health") return Response.json({ ok: true });
