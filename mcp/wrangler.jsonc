@@ -1,0 +1,17 @@
+{
+  "name": "distro",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // global_fetch_strictly_public is required for Client ID Metadata Documents (SSRF guard).
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "routes": [{ "pattern": "mcp.trydistro.app", "custom_domain": true }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "20d13cc195d44367af6908ed784ae6e6" }],
+  // Production values. Local dev overrides both in .dev.vars:
+  //   ORIGIN=http://localhost:8787
+  //   WEB_ORIGIN=http://localhost:3000
+  // Secret (wrangler secret put): ZERNIO_API_KEY
+  "vars": {
+    "ORIGIN": "https://mcp.trydistro.app",
+    "WEB_ORIGIN": "https://trydistro.app"
+  }
+}
