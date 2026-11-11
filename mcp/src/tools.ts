@@ -195,6 +195,19 @@ export const TOOLS: Record<string, Tool> = {
       negative_prompt: z.string().max(1000).optional(),
       first_frame: z.string().url().optional().describe("Public image URL to start from (image-to-video)."),
       audio_url: z.string().url().optional().describe("Public wav or mp3 that drives lip sync. Wan models only."),
+      video: z
+        .string()
+        .url()
+        .optional()
+        .describe(
+          "Public URL of a source video to edit or extend, e.g. a video_url from get_job. Models: gemini-omni-1.2-flash (edit or extend), kling-o1-edit-video, wan2.7-videoedit, pixverse-v6-extend. Models without a source-video input use it as a reference video.",
+        ),
+      video_task: z.enum(["edit", "extend"]).optional().describe("With `video` on gemini-omni models: edit the clip (default) or continue it."),
+      reference_videos: z
+        .array(z.string().url())
+        .max(5)
+        .optional()
+        .describe("Public video URLs that guide motion, style or character. Models: wan3.0-video, MiniMax-H3, seedance-2-5-260628 and others."),
       dry_run: z.boolean().default(false),
     },
     run: (ws, a) => generateVideo(ws, a),

@@ -16,12 +16,15 @@ them through three tools, which need the `video` scope:
 | Tool | Calls | Notes |
 |---|---|---|
 | `list_models` | `GET /models` | |
-| `generate_video` | `POST /generate` | Takes `model`, `prompt`, `duration`, `aspect`, `resolution`, `negative_prompt`, `first_frame`, `audio_url`, `dry_run`. `model` defaults to `fast`. |
+| `generate_video` | `POST /generate` | Takes `model`, `prompt`, `duration`, `aspect`, `resolution`, `negative_prompt`, `first_frame`, `audio_url`, `video`, `video_task`, `reference_videos`, `dry_run`. `model` defaults to `fast`. Video fields take public URLs only (no upload through the MCP). |
 | `get_job` | `GET /jobs/{id}` | Only answers for jobs the same workspace started. |
 
 ```bash
 distro call generate_video '{"prompt": "Vertical selfie video, a young adult says: why did nobody tell me about this app?"}'
 distro call get_job '{"job_id": "job_..."}'
+
+# edit a video Distro made earlier: pass its video_url as `video`
+distro call generate_video '{"model": "gemini-omni-1.2-flash", "prompt": "Change the green sweater to red.", "video": "https://mcp.trydistro.app/videos/job_....mp4"}'
 ```
 
 - When a job is ready, `video_url` is `https://mcp.trydistro.app/videos/<job_id>.mp4`. It
@@ -71,7 +74,9 @@ with `wrangler secret put MODEL_SERVER_TOKEN`.
 | `POST` | `/generate?wait=true` | Same, but waits until the video is ready (`wait_timeout`, default 600 s). |
 | `GET` | `/jobs/{id}` | Job status, cost, and `video_url` when ready. |
 | `GET` | `/jobs/{id}/video` | The finished mp4. |
-| `GET` | `/models` | Selectable models with a 5 s 720p price estimate. `?all=true` lists every video model. |
+| `GET` | `/models` | Selectable models with a 5 s 720p price estimate. `?video=true` lists models that take a video; `?all=true` lists every video model. |
+| `POST` | `/uploads` | Upload a video, image or audio file. Returns an `upload_id` to use in `/generate`. |
+| `GET` | `/files/{upload_id}` | Signed, expiring link to an upload. No token; this is what GMI fetches. |
 | `GET` | `/spend` | Spend cap, committed, reserved, recent ledger entries. |
 | `GET` | `/health` | Liveness and catalog date. No token needed. |
 
@@ -87,11 +92,14 @@ with `wrangler secret put MODEL_SERVER_TOKEN`.
 | `aspect` | `"9:16"` | Aspect ratio. |
 | `resolution` | `"720p"` | Snapped to the nearest resolution the model offers. |
 | `negative_prompt` | none | What to avoid, if the model supports it. |
-| `first_frame` | none | Public image URL to start from (image-to-video). |
-| `last_frame` | none | Public image URL to end on, if supported. |
-| `audio_url` | none | Public wav/mp3 that drives lip sync. Only Wan models support it. |
+| `first_frame` | none | Image to start from (image-to-video): a public URL or an `upload_id`. |
+| `last_frame` | none | Image to end on, if supported: a URL or an `upload_id`. |
+| `audio_url` | none | wav/mp3 that drives lip sync: a URL or an `upload_id`. Only Wan models support it. |
 | `audio` | `true` | Generate an audio track where the model has a switch. |
 | `seed` | none | Fixed seed, if supported. |
+| `video` | none | Source video to edit, extend or transform: a public URL or an `upload_id`. See [Video as input](#video-as-input). |
+| `video_task` | `"edit"` | With `video` on Omni models: `edit` the clip or `extend` it. |
+| `reference_videos` | none | Up to 5 videos (URLs or `upload_id`s) that guide motion, style or character. |
 | `dry_run` | `false` | Return the exact GMI payload and price estimate without spending. |
 
 Any value a model does not support is changed to its nearest option, and each change is
@@ -184,6 +192,46 @@ were reviewed, not lip sync or audio quality. Times include GMI's queue and will
 
 For any other model, call `GET /models` and try it with `dry_run: true`.
 
+## Video as input
+
+A model can take a video in two ways:
+
+| Field | What the model does with it | Models |
+|---|---|---|
+| `video` | Edits, extends or transforms that clip. The output follows its framing. | `gemini-omni-1.2-flash` (`video_task`: `edit` or `extend`), `kling-o1-edit-video`, `wan2.7-videoedit`, `pixverse-v6-extend`, `Krea-Realtime-14B` |
+| `reference_videos` | Uses the clips as a guide for motion, style or a character, and makes a new video. | `wan3.0-video` (up to 5), `MiniMax-H3`, `seedance-2-5-260628`, `seedance-2-0-*` (up to 3), `wan2.7-r2v`, `skyreels-v4-omni` |
+
+`GET /models?video=true` lists every model that takes a video. If you pass `video` to a
+model that has only a reference input, it is used as a reference and `warnings` says so.
+A model that requires a source video (for example `kling-o1-edit-video`) answers `400`
+without one.
+
+GMI fetches the video itself, so it needs a URL GMI can reach. Either pass a public URL
+(a `video_url` from an earlier job works), or upload a local file first:
+
+```bash
+# 1. upload (raw body; set the right content-type). Max 31 MB: Cloud Run's request limit.
+curl -s "$MODEL_SERVER/uploads" -H "Authorization: Bearer $MODEL_SERVER_TOKEN" \
+  -H 'content-type: video/mp4' --data-binary @clip.mp4
+# -> {"upload_id": "upload_4a0bb75bd2013b1d.mp4", "bytes": 2604435, "url": "https://.../files/upload_...?exp=...&sig=...", ...}
+
+# 2. generate with it
+curl -s "$MODEL_SERVER/generate?wait=true" -H "Authorization: Bearer $MODEL_SERVER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"model": "gemini-omni-1.2-flash", "prompt": "Change the green sweater to red.", "video": "upload_4a0bb75bd2013b1d.mp4"}'
+```
+
+- Accepted types: `video/mp4`, `video/quicktime`, `video/webm`, `image/png`, `image/jpeg`,
+  `image/webp`, `audio/mpeg`, `audio/wav`. Images and audio work the same way for
+  `first_frame`, `last_frame` and `audio_url`.
+- The server turns an `upload_id` into a signed `/files/...` link valid for 24 hours. The
+  link needs no token, so anyone holding it can download the file until it expires.
+  Uploads are kept in the bucket under `uploads/`.
+- Cost is still estimated from `duration` and the model's price.
+- Tested 2026-11-11 on Cloud Run: an uploaded 5 s clip extended with `pixverse-v6-extend`
+  (`audio: false`) was ready in 92 s for $0.175. Other video models were checked only
+  with `dry_run`.
+
 ## Spend cap
 
 Every job reserves its list-price estimate before it is sent to GMI. GMI keeps
@@ -207,7 +255,7 @@ generating even when the account balance is negative, so this cap is the real li
 |---|---|
 | URL | `https://distro-model-417048709195.asia-east1.run.app` |
 | GCP project / region | `distro-model-66ada6` / `asia-east1` |
-| Storage | `gs://distro-model-66ada6-media` (`videos/`, `jobs/`, `spend.json`) |
+| Storage | `gs://distro-model-66ada6-media` (`videos/`, `jobs/`, `uploads/`, `spend.json`) |
 | Secrets | Secret Manager: `gmi-api-key`, `model-server-token` |
 | Instances | Exactly 1, CPU always on. Keep `--max-instances 1`: the spend ledger and job polling assume a single instance. |
 

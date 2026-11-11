@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T11:26:11+00:00",
+ "generated_at": "2026-11-11T14:09:15+00:00",
  "source": "https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/models",
  "featured": {
   "fast": [
@@ -37,6 +37,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -98,6 +100,13 @@
      "required": false,
      "default_value": "",
      "max_value": 5
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": false,
+     "default_value": "",
+     "max_value": 3
     },
     "task": {
      "name": "task",
@@ -229,6 +238,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [
@@ -359,6 +370,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -488,6 +501,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -632,6 +647,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -705,6 +722,12 @@
      "type": "image",
      "required": false,
      "max_value": 9
+    },
+    "reference_videos": {
+     "name": "reference_videos",
+     "type": "video",
+     "required": false,
+     "max_value": 3
     }
    },
    "price": {
@@ -840,6 +863,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -904,6 +929,13 @@
      "required": false,
      "default_value": [],
      "max_value": 9
+    },
+    "reference_videos": {
+     "name": "reference_videos",
+     "type": "video",
+     "required": false,
+     "default_value": [],
+     "max_value": 3
     },
     "audio_gen": {
      "name": "generate_audio",
@@ -1049,6 +1081,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -1246,6 +1280,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -1316,6 +1352,12 @@
     "audio_drive": {
      "name": "audio_url",
      "type": "audio",
+     "required": false,
+     "max_value": 5
+    },
+    "reference_videos": {
+     "name": "reference_video",
+     "type": "video",
      "required": false,
      "max_value": 5
     },
@@ -1460,6 +1502,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -1530,6 +1574,12 @@
     "audio_drive": {
      "name": "audio_url",
      "type": "audio",
+     "required": false,
+     "max_value": 5
+    },
+    "reference_videos": {
+     "name": "reference_video",
+     "type": "video",
      "required": false,
      "max_value": 5
     },
@@ -1672,13 +1722,22 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [
-    "video",
     "mask"
    ],
-   "map": {},
+   "map": {
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "default_value": "",
+     "max_value": 1
+    }
+   },
    "price": {
     "unit": "second",
     "base_usd": 0.05,
@@ -1742,12 +1801,20 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
-   "map": {},
+   "unmapped_required": [],
+   "map": {
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "default_value": "",
+     "max_value": 1
+    }
+   },
    "price": {
     "unit": "second",
     "base_usd": 0.05,
@@ -1814,12 +1881,20 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
-   "map": {},
+   "unmapped_required": [],
+   "map": {
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "default_value": "",
+     "max_value": 1
+    }
+   },
    "price": {
     "unit": "second",
     "base_usd": 0.05,
@@ -1896,6 +1971,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -1952,6 +2029,13 @@
      "required": false,
      "default_value": "",
      "max_value": 5
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": false,
+     "default_value": "",
+     "max_value": 3
     },
     "task": {
      "name": "task",
@@ -2075,6 +2159,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -2128,6 +2214,13 @@
      "required": false,
      "default_value": "",
      "max_value": 5
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": false,
+     "default_value": "",
+     "max_value": 3
     }
    },
    "price": {
@@ -2221,6 +2314,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [],
@@ -2267,6 +2362,8 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [],
@@ -2347,6 +2444,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -2456,6 +2555,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -2555,6 +2656,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -2712,6 +2815,8 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -2867,6 +2972,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3011,6 +3118,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -3167,11 +3276,11 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
-   "selectable": false,
-   "unmapped_required": [
-    "video_url"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -3195,6 +3304,12 @@
      "required": true,
      "default_value": "",
      "max_value": 1
+    },
+    "video": {
+     "name": "video_url",
+     "type": "video",
+     "required": true,
+     "default_value": ""
     }
    },
    "price": {
@@ -3275,11 +3390,11 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
-   "selectable": false,
-   "unmapped_required": [
-    "video_url"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -3303,6 +3418,12 @@
      "required": true,
      "default_value": "",
      "max_value": 1
+    },
+    "video": {
+     "name": "video_url",
+     "type": "video",
+     "required": true,
+     "default_value": ""
     }
    },
    "price": {
@@ -3384,6 +3505,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3501,10 +3624,19 @@
    "required_inputs": [],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [],
-   "map": {},
+   "map": {
+    "video": {
+     "name": "video_url",
+     "type": "video",
+     "required": false,
+     "max_value": 1
+    }
+   },
    "price": {
     "unit": "request",
     "base_usd": 0.007,
@@ -3543,6 +3675,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3647,6 +3781,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3744,6 +3880,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3841,6 +3979,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -3939,6 +4079,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -4036,6 +4178,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -4129,6 +4273,8 @@
    "required_inputs": [],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [
@@ -4175,11 +4321,11 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
-   "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -4223,6 +4369,13 @@
       "pro",
       "std"
      ]
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "default_value": "",
+     "max_value": 1
     }
    },
    "price": {
@@ -4309,6 +4462,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -4415,6 +4570,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -4542,11 +4699,11 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
-   "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -4590,6 +4747,13 @@
       "pro",
       "std"
      ]
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "default_value": "",
+     "max_value": 1
     }
    },
    "price": {
@@ -4685,6 +4849,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -4789,6 +4955,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -4893,6 +5061,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -5000,6 +5170,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -5116,6 +5288,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -5240,6 +5414,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -5403,6 +5579,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -5421,6 +5599,13 @@
      "options": [
       "832*480"
      ]
+    },
+    "video": {
+     "name": "input_video",
+     "type": "video",
+     "required": false,
+     "default_value": "",
+     "max_value": 1
     },
     "seed": {
      "name": "seed",
@@ -5505,6 +5690,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -5675,6 +5862,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -5869,6 +6058,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -6045,11 +6236,11 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": true,
-   "selectable": false,
-   "unmapped_required": [
-    "video_url"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -6094,6 +6285,13 @@
      "name": "images",
      "type": "image",
      "required": false,
+     "default_value": "",
+     "max_value": 1
+    },
+    "video": {
+     "name": "video_url",
+     "type": "video",
+     "required": true,
      "default_value": "",
      "max_value": 1
     },
@@ -6216,6 +6414,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -6388,6 +6588,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -6563,6 +6765,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -6735,6 +6939,8 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -6849,6 +7055,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -6976,6 +7184,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -7086,6 +7296,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -7196,6 +7408,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -7354,6 +7568,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -7530,6 +7746,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -7692,6 +7910,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -7881,6 +8101,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -8064,6 +8286,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -8216,6 +8440,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -8399,6 +8625,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -8576,6 +8804,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -8728,11 +8958,11 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
-   "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -8759,6 +8989,12 @@
       "720p",
       "1080p"
      ]
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "max_value": 1
     },
     "audio_gen": {
      "name": "generate_audio_switch",
@@ -8842,6 +9078,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -8964,6 +9202,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9103,6 +9343,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -9235,6 +9477,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9397,6 +9641,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9545,6 +9791,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9722,6 +9970,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9785,6 +10035,13 @@
      "required": false,
      "default_value": [],
      "max_value": 9
+    },
+    "reference_videos": {
+     "name": "reference_videos",
+     "type": "video",
+     "required": false,
+     "default_value": [],
+     "max_value": 3
     },
     "audio_gen": {
      "name": "generate_audio",
@@ -9937,6 +10194,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -9998,6 +10257,13 @@
      "required": false,
      "default_value": [],
      "max_value": 9
+    },
+    "reference_videos": {
+     "name": "reference_videos",
+     "type": "video",
+     "required": false,
+     "default_value": [],
+     "max_value": 3
     },
     "audio_gen": {
      "name": "generate_audio",
@@ -10143,6 +10409,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -10204,6 +10472,13 @@
      "required": false,
      "default_value": [],
      "max_value": 9
+    },
+    "reference_videos": {
+     "name": "reference_videos",
+     "type": "video",
+     "required": false,
+     "default_value": [],
+     "max_value": 3
     },
     "audio_gen": {
      "name": "generate_audio",
@@ -10360,6 +10635,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -10475,6 +10752,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -10514,6 +10793,12 @@
      "options": [
       "std"
      ]
+    },
+    "reference_videos": {
+     "name": "ref_videos",
+     "type": "json",
+     "required": false,
+     "default_value": []
     },
     "audio_gen": {
      "name": "sound",
@@ -10623,6 +10908,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -10748,6 +11035,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -10965,6 +11254,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -11160,6 +11451,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -11389,6 +11682,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -11595,6 +11890,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -11694,6 +11991,8 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -11778,6 +12077,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -11849,6 +12150,8 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -11945,6 +12248,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12028,6 +12333,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12142,6 +12449,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12242,6 +12551,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12340,6 +12651,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12446,6 +12759,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12564,6 +12879,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12670,13 +12987,21 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": false,
    "unmapped_required": [
-    "video_path",
     "refer_path"
    ],
-   "map": {},
+   "map": {
+    "video": {
+     "name": "video_path",
+     "type": "video",
+     "required": true,
+     "default_value": ""
+    }
+   },
    "price": {
     "unit": "second",
     "base_usd": 0.15,
@@ -12744,6 +13069,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -12912,6 +13239,8 @@
    ],
    "text_to_video": false,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -13095,11 +13424,11 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
-   "selectable": false,
-   "unmapped_required": [
-    "reference_video_urls"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -13142,6 +13471,12 @@
       "1632*1248",
       "1248*1632"
      ]
+    },
+    "reference_videos": {
+     "name": "reference_video_urls",
+     "type": "video",
+     "required": true,
+     "max_value": 3
     },
     "watermark": {
      "name": "watermark",
@@ -13259,6 +13594,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -13444,6 +13781,8 @@
    "required_inputs": [],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": false,
    "selectable": true,
    "unmapped_required": [],
@@ -13612,6 +13951,8 @@
    ],
    "text_to_video": true,
    "image_to_video": true,
+   "video_input": false,
+   "reference_video": true,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -13670,6 +14011,13 @@
     "reference_images": {
      "name": "reference_image",
      "type": "image",
+     "required": false,
+     "default_value": [],
+     "max_value": 5
+    },
+    "reference_videos": {
+     "name": "reference_video",
+     "type": "video",
      "required": false,
      "default_value": [],
      "max_value": 5
@@ -13802,6 +14150,8 @@
    ],
    "text_to_video": true,
    "image_to_video": false,
+   "video_input": false,
+   "reference_video": false,
    "supports_9_16": true,
    "selectable": true,
    "unmapped_required": [],
@@ -13971,11 +14321,11 @@
    ],
    "text_to_video": false,
    "image_to_video": false,
+   "video_input": true,
+   "reference_video": false,
    "supports_9_16": false,
-   "selectable": false,
-   "unmapped_required": [
-    "video"
-   ],
+   "selectable": true,
+   "unmapped_required": [],
    "map": {
     "prompt": {
      "name": "prompt",
@@ -14012,6 +14362,12 @@
      "name": "reference_image",
      "type": "image",
      "required": false,
+     "max_value": 1
+    },
+    "video": {
+     "name": "video",
+     "type": "video",
+     "required": true,
      "max_value": 1
     },
     "watermark": {

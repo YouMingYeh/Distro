@@ -62,6 +62,8 @@ ALIASES: dict[str, list[str]] = {
     "last_frame": ["last_frame", "last_frame_image", "lastFrame", "last_frame_img", "end_frame_url"],
     "reference_images": ["reference_image", "reference_images", "images"],
     "audio_drive": ["audio_url"],
+    "video": ["video", "video_url", "input_video", "video_path"],  # source video to edit / extend / transform
+    "reference_videos": ["reference_videos", "reference_video", "reference_video_urls", "ref_videos"],
     "audio_gen": ["generate_audio", "generateAudio", "generate_audio_switch", "sound", "audio"],
     "watermark": ["watermark"],
     "task": ["task"],
@@ -99,6 +101,8 @@ def build_map(params: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
                 continue
             # 'audio' and 'image' are ambiguous across models: check the type.
             if slot == "audio_gen" and n == "audio" and p.get("type") != "boolean":
+                continue
+            if slot == "video" and p.get("type") != "video":
                 continue
             if slot == "first_frame" and n in ("image", "image_path") and p.get("type") not in ("first_frame_image", "image"):
                 continue
@@ -159,6 +163,8 @@ def entry(model: dict[str, Any]) -> dict[str, Any]:
         "required_inputs": required_inputs,
         "text_to_video": "prompt" in m and not any(t != "text" for t in required_inputs),
         "image_to_video": "first_frame" in m,
+        "video_input": "video" in m,
+        "reference_video": "reference_videos" in m,
         "supports_9_16": "9:16" in aspect_opts,
         "selectable": not unmapped and "prompt" in m,
         "unmapped_required": unmapped,
@@ -219,10 +225,11 @@ def main() -> None:
             flags = "".join([
                 "T" if e["text_to_video"] else "-", "I" if e["image_to_video"] else "-",
                 "9" if e["supports_9_16"] else "-", "A" if "audio_drive" in e["map"] else "-",
+                "V" if e["video_input"] else "-", "R" if e["reference_video"] else "-",
                 "" if e["selectable"] else f" unmapped={e['unmapped_required']}",
             ])
             print(f"  {e['featured'] or '':12} {e['id']:40} ${e['price']['base_usd']:.3f}/{e['price']['unit']}  {flags}")
-        print("  flags: T=text-to-video I=first-frame 9=9:16 A=audio-driven")
+        print("  flags: T=text-to-video I=first-frame 9=9:16 A=audio-driven V=source video R=reference video")
 
 
 if __name__ == "__main__":
