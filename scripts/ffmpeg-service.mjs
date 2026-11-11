@@ -14,28 +14,41 @@
 // Node built-ins only. Requires ffmpeg and ffprobe on PATH.
 
 import http from "node:http";
+import https from "node:https";
+import net from "node:net";
+import dns from "node:dns";
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, readFile, stat, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 const HELP = `Distro ffmpeg service
 
 Usage:
-  node scripts/ffmpeg-service.mjs [--port 8788] [--host 0.0.0.0]
+  node scripts/ffmpeg-service.mjs [--port 8788] [--host 127.0.0.1] [--allow-private]
 
 Options:
-  --port <n>   Port to listen on (default: $PORT or 8788)
-  --host <h>   Interface to bind (default: 127.0.0.1)
-  --help       Show this help
+  --port <n>        Port to listen on (default: $PORT or 8788)
+  --host <h>        Interface to bind (default: 127.0.0.1). A non-loopback host
+                    requires FFMPEG_SERVICE_TOKEN; the service refuses to start
+                    without it.
+  --allow-private   LOCAL DEVELOPMENT ONLY (for example next to "wrangler dev").
+                    Lets the service download from loopback and private
+                    addresses. Never use it behind a public tunnel.
+  --help            Show this help
 
 Environment:
   PORT                  Port, if --port is not given
   FFMPEG_SERVICE_TOKEN  If set, every request except GET /health must send
                         "Authorization: Bearer <token>"
+  FFMPEG_ALLOWED_ORIGINS  Comma-separated origins the service may download
+                        from and call back to, e.g.
+                        "https://distro.example.workers.dev". When set, any
+                        other origin (including redirect hops) is rejected.
+                        Recommended whenever the service is publicly reachable.
+  FFMPEG_ALLOW_PRIVATE  "1" is the same as --allow-private (local dev only)
   FFMPEG_FONT           Path to a .ttf/.otf/.ttc font used for burned-in text
   FFMPEG_BIN / FFPROBE_BIN   Override binary paths
 
@@ -45,7 +58,12 @@ Endpoints:
   POST /frames   {"url": "...", "count": 4, "width": 360} -> {duration_ms,width,height,frames:[{at_ms,jpeg_base64}]}
   POST /edit     see the build spec; returns video/mp4 with X-* headers
 
-Expose it publicly for a deployed Worker, for example:
+Downloads are restricted: http(s) only, no loopback / private / link-local
+addresses (unless --allow-private), redirects re-checked hop by hop.
+
+Expose it publicly for a deployed Worker, for example (set a token first):
+  FFMPEG_SERVICE_TOKEN=... FFMPEG_ALLOWED_ORIGINS=https://<worker>.workers.dev \\
+    node scripts/ffmpeg-service.mjs --port 8788
   npx cloudflared tunnel --url http://127.0.0.1:8788
 `;
 
@@ -66,6 +84,25 @@ const HOST = argValue("--host") || process.env.HOST || "127.0.0.1";
 const TOKEN = process.env.FFMPEG_SERVICE_TOKEN || "";
 const FFMPEG = process.env.FFMPEG_BIN || "ffmpeg";
 const FFPROBE = process.env.FFPROBE_BIN || "ffprobe";
+const ALLOW_PRIVATE = process.argv.includes("--allow-private") || process.env.FFMPEG_ALLOW_PRIVATE === "1";
+const ALLOWED_ORIGINS = new Set(
+  (process.env.FFMPEG_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => {
+      try {
+        return new URL(x).origin;
+      } catch {
+        process.stderr.write(`FFMPEG_ALLOWED_ORIGINS: "${x}" is not a valid origin (expected e.g. https://host).\n`);
+        process.exit(1);
+      }
+    }),
+);
+const MAX_REDIRECTS = 3;
+// ffmpeg/ffprobe may only open local files for downloaded inputs, so a crafted
+// playlist or container cannot make them fetch network resources.
+const FILE_ONLY = ["-protocol_whitelist", "file"];
 
 const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES = 600 * 1024 * 1024;
@@ -170,48 +207,207 @@ const EXT_BY_TYPE = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
 };
+const SAFE_EXTS = new Set([".mp4", ".mov", ".webm", ".m4v", ".mp3", ".wav", ".m4a", ".aac", ".png", ".jpg", ".jpeg", ".webp"]);
 
-async function download(url, dir, name) {
+// ------------------------------------------------- outbound request guard
+//
+// Every URL this service fetches comes from a request body, so each one is
+// checked before any connection is made: http(s) only, optional origin
+// allowlist, and no loopback / private / link-local / CGNAT / unique-local /
+// multicast / unspecified destination. The addresses that passed the check
+// are the ones the socket connects to (pinned lookup), so a hostname cannot
+// resolve differently between check and connect. Redirects are followed by
+// hand and every hop goes through the same checks.
+
+function ipv4Blocked(a, b) {
+  if (a === 0) return "unspecified";
+  if (a === 10) return "private";
+  if (a === 127) return "loopback";
+  if (a === 100 && b >= 64 && b <= 127) return "carrier-grade NAT";
+  if (a === 169 && b === 254) return "link-local";
+  if (a === 172 && b >= 16 && b <= 31) return "private";
+  if (a === 192 && b === 168) return "private";
+  if (a === 192 && b === 0) return "reserved";
+  if (a === 198 && (b === 18 || b === 19)) return "reserved";
+  if (a >= 224 && a <= 239) return "multicast";
+  if (a >= 240) return "reserved";
+  return null;
+}
+
+// Expand an IPv6 literal to 8 16-bit groups, or null if it is not valid.
+function ipv6Groups(addr) {
+  let s = addr.split("%")[0];
+  const v4 = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const n = v4.slice(1).map(Number);
+    if (n.some((x) => x > 255)) return null;
+    s = s.slice(0, v4.index) + ((n[0] << 8) | n[1]).toString(16) + ":" + ((n[2] << 8) | n[3]).toString(16);
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0 || (halves.length === 1 && head.length !== 8)) return null;
+  const groups = [...head, ...Array(fill).fill("0"), ...tail].map((g) => parseInt(g, 16));
+  if (groups.length !== 8 || groups.some((g) => !Number.isInteger(g) || g < 0 || g > 0xffff)) return null;
+  return groups;
+}
+
+// Returns a reason string when the address must not be contacted, else null.
+function blockedAddress(address) {
+  const kind = net.isIP(address);
+  if (kind === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return ipv4Blocked(a, b);
+  }
+  if (kind !== 6) return "not an IP address";
+  const g = ipv6Groups(address);
+  if (!g) return "unparseable IPv6 address";
+  if (g.every((x) => x === 0)) return "unspecified";
+  if (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) return "loopback";
+  // Addresses that embed an IPv4 address are judged by that IPv4 address.
+  const embedded = () => ipv4Blocked(g[6] >> 8, g[6] & 0xff);
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) {
+    return embedded() ? `IPv4-mapped ${embedded()}` : null; // ::ffff:a.b.c.d
+  }
+  if (g.slice(0, 6).every((x) => x === 0)) return "reserved"; // ::a.b.c.d (deprecated IPv4-compatible)
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) {
+    return embedded() ? `NAT64 ${embedded()}` : null; // 64:ff9b::a.b.c.d
+  }
+  if ((g[0] & 0xfe00) === 0xfc00) return "unique-local";
+  if ((g[0] & 0xffc0) === 0xfe80) return "link-local";
+  if ((g[0] & 0xff00) === 0xff00) return "multicast";
+  return null;
+}
+
+// Validate a URL and resolve it. Returns { url, addresses } with the addresses
+// the connection must use. Throws HttpError(400) for anything not allowed.
+async function checkDestination(rawUrl, what) {
   let u;
   try {
-    u = new URL(String(url));
+    u = new URL(String(rawUrl));
   } catch {
-    throw new HttpError(400, `Invalid URL for ${name}.`);
+    throw new HttpError(400, `Invalid URL for ${what}.`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
-    throw new HttpError(400, `URL for ${name} must be http(s).`);
+    throw new HttpError(400, `URL for ${what} must be http(s).`);
   }
+  if (u.username || u.password) throw new HttpError(400, `URL for ${what} must not contain credentials.`);
+  if (ALLOWED_ORIGINS.size && !ALLOWED_ORIGINS.has(u.origin)) {
+    throw new HttpError(400, `Blocked URL for ${what}: origin ${u.origin} is not in FFMPEG_ALLOWED_ORIGINS.`);
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  let addresses;
+  if (net.isIP(host)) {
+    addresses = [{ address: host, family: net.isIP(host) }];
+  } else {
+    try {
+      addresses = await dns.promises.lookup(host, { all: true });
+    } catch (e) {
+      throw new HttpError(502, `Could not resolve host for ${what} (${u.hostname}): ${e.code || e.message}`);
+    }
+    if (!addresses.length) throw new HttpError(502, `Host for ${what} (${u.hostname}) has no addresses.`);
+  }
+  if (!ALLOW_PRIVATE) {
+    for (const a of addresses) {
+      const why = blockedAddress(a.address);
+      if (why) {
+        throw new HttpError(
+          400,
+          `Blocked URL for ${what}: ${u.hostname} resolves to a ${why} address. This service only fetches public URLs` +
+            ` (start it with --allow-private for local development only).`,
+        );
+      }
+    }
+  }
+  return { url: u, addresses };
+}
+
+// One HTTP(S) request to an already-checked destination, connecting only to
+// the checked addresses. Resolves with the IncomingMessage (not consumed).
+function pinnedRequest({ url, addresses }, { method = "GET", headers = {}, bodyStream = null, timeoutMs = DOWNLOAD_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    const mod = url.protocol === "https:" ? https : http;
+    const lookup = (_hostname, opts, cb) => {
+      if (opts && opts.all) cb(null, addresses);
+      else cb(null, addresses[0].address, addresses[0].family);
+    };
+    const req = mod.request(url, { method, headers, lookup, agent: false }, resolve);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("request timed out")));
+    req.on("error", reject);
+    if (bodyStream) {
+      bodyStream.on("error", (e) => req.destroy(e));
+      bodyStream.pipe(req);
+    } else {
+      req.end();
+    }
+  });
+}
+
+// GET with manual, re-validated redirects. Resolves with { resp, finalUrl }.
+async function guardedGet(rawUrl, what) {
+  let target = await checkDestination(rawUrl, what);
+  for (let hop = 0; ; hop++) {
+    const resp = await pinnedRequest(target);
+    const status = resp.statusCode || 0;
+    if (status >= 300 && status < 400 && resp.headers.location) {
+      resp.resume();
+      if (hop >= MAX_REDIRECTS) throw new HttpError(400, `Too many redirects (more than ${MAX_REDIRECTS}) while fetching ${what}.`);
+      let next;
+      try {
+        next = new URL(resp.headers.location, target.url);
+      } catch {
+        throw new HttpError(502, `${what} redirected to an invalid Location.`);
+      }
+      target = await checkDestination(next.href, `${what} (redirect hop ${hop + 1})`);
+      continue;
+    }
+    return { resp, finalUrl: target.url };
+  }
+}
+
+async function download(url, dir, name) {
   let resp;
+  let u;
   for (let attempt = 1; ; attempt++) {
     try {
-      resp = await fetch(u, { redirect: "follow", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
-      if (resp.status < 500 || attempt >= 3) break;
-      await resp.body?.cancel().catch(() => {});
+      const got = await guardedGet(url, name);
+      resp = got.resp;
+      u = got.finalUrl;
+      if ((resp.statusCode || 0) < 500 || attempt >= 3) break;
+      resp.resume();
     } catch (e) {
+      // Policy and validation failures are final; only network errors retry.
+      if (e instanceof HttpError && e.status === 400) throw e;
       if (attempt >= 3) {
-        const why = e?.cause?.code || e?.cause?.message || e.message;
-        throw new HttpError(502, `Could not download ${name} from ${u.origin}${u.pathname}: ${why}`);
+        if (e instanceof HttpError) throw e;
+        throw new HttpError(502, `Could not download ${name}: ${e?.code || e?.message || e}`);
       }
     }
     await new Promise((r) => setTimeout(r, 400 * attempt));
   }
-  if (!resp.ok || !resp.body) {
-    throw new HttpError(502, `Could not download ${name}: HTTP ${resp.status} from ${u.origin}${u.pathname}`);
+  const status = resp.statusCode || 0;
+  if (status < 200 || status >= 300) {
+    resp.resume();
+    throw new HttpError(502, `Could not download ${name}: HTTP ${status} from ${u.origin}${u.pathname}`);
   }
-  const declared = Number(resp.headers.get("content-length") || 0);
-  if (declared > MAX_DOWNLOAD_BYTES) throw new HttpError(413, `${name} is larger than the download limit.`);
-  const contentType = (resp.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const declared = Number(resp.headers["content-length"] || 0);
+  if (declared > MAX_DOWNLOAD_BYTES) {
+    resp.destroy();
+    throw new HttpError(413, `${name} is larger than the download limit.`);
+  }
+  const contentType = String(resp.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
   const urlExt = path.extname(u.pathname).toLowerCase();
-  const ext = /^\.[a-z0-9]{2,5}$/.test(urlExt) ? urlExt : EXT_BY_TYPE[contentType] || ".bin";
+  const ext = SAFE_EXTS.has(urlExt) ? urlExt : EXT_BY_TYPE[contentType] || ".bin";
   const file = path.join(dir, `${name}${ext}`);
   let size = 0;
-  const src = Readable.fromWeb(resp.body);
-  src.on("data", (c) => {
+  resp.on("data", (c) => {
     size += c.length;
-    if (size > MAX_DOWNLOAD_BYTES) src.destroy(new Error("download limit exceeded"));
+    if (size > MAX_DOWNLOAD_BYTES) resp.destroy(new Error("download limit exceeded"));
   });
   try {
-    await pipeline(src, createWriteStream(file));
+    await pipeline(resp, createWriteStream(file));
   } catch (e) {
     throw new HttpError(502, `Download of ${name} failed: ${e.message}`);
   }
@@ -236,11 +432,12 @@ async function mapLimit(items, limit, fn) {
 async function probeFile(file) {
   const r = await run(
     FFPROBE,
-    ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", file],
+    ["-v", "error", ...FILE_ONLY, "-print_format", "json", "-show_format", "-show_streams", file],
     { timeoutMs: 30_000 },
   );
   if (r.code !== 0) {
-    throw new HttpError(422, `ffprobe could not read the file: ${stderrTail(r.stderr, 300)}`);
+    const detail = stderrTail(r.stderr, 300).split(path.dirname(file) + path.sep).join("");
+    throw new HttpError(422, `ffprobe could not read the file: ${detail}`);
   }
   let j;
   try {
@@ -451,12 +648,12 @@ async function buildEdit(reqBody, dir) {
     return nIn++;
   };
   const hookIdx = hookDl
-    ? addInput("-i", hookDl.base)
+    ? addInput(...FILE_ONLY, "-i", hookDl.base)
     : addInput("-f", "lavfi", "-i", `color=c=0x111318:s=${W}x${H}:r=${FPS}:d=${num(hookD)}`);
-  for (const b of bodies) b.idx = addInput("-i", b.dl.base);
+  for (const b of bodies) b.idx = addInput(...FILE_ONLY, "-i", b.dl.base);
   const endIdx = addInput("-f", "lavfi", "-i", `color=c=0x111318:s=${W}x${H}:r=${FPS}:d=${num(END_CARD_S)}`);
-  for (const a of audios) a.idx = addInput("-i", a.dl.base);
-  const iconIdx = iconDl ? addInput("-loop", "1", "-t", num(END_CARD_S), "-i", iconDl.base) : -1;
+  for (const a of audios) a.idx = addInput(...FILE_ONLY, "-i", a.dl.base);
+  const iconIdx = iconDl ? addInput(...FILE_ONLY, "-loop", "1", "-t", num(END_CARD_S), "-i", iconDl.base) : -1;
   // Quiet generated bed: a soft low chord with slow tremolo. No third-party audio.
   const bedIdx = addInput(
     "-f",
@@ -643,6 +840,9 @@ async function handleEdit(req, res) {
   const body = await readJson(req);
   const outputKey = typeof body.output_key === "string" ? body.output_key : "";
   const started = Date.now();
+  const wantsCallback = typeof body.callback_url === "string" && body.callback_url;
+  // Reject a disallowed callback before doing any work (it is re-checked and pinned at send time).
+  if (wantsCallback) await checkDestination(body.callback_url, "callback_url");
   await enqueue(async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "distro-edit-"));
     try {
@@ -661,13 +861,17 @@ async function handleEdit(req, res) {
         // Alternative response: push the bytes to the Worker, answer with JSON.
         const headers = { "Content-Type": "video/mp4", "Content-Length": String(out.size), "X-Output-Key": outputKey };
         if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
-        const cb = await fetch(body.callback_url, {
-          method: "POST",
-          headers,
-          body: Readable.toWeb(createReadStream(out.outFile)),
-          duplex: "half",
-        });
-        if (!cb.ok) throw new HttpError(502, `callback_url rejected the upload: HTTP ${cb.status}`);
+        // Redirects are not followed for the callback (it carries the bearer token).
+        const target = await checkDestination(body.callback_url, "callback_url");
+        let cb;
+        try {
+          cb = await pinnedRequest(target, { method: "POST", headers, bodyStream: createReadStream(out.outFile) });
+        } catch (e) {
+          throw new HttpError(502, `callback_url upload failed: ${e?.code || e?.message || e}`);
+        }
+        cb.resume();
+        const cbStatus = cb.statusCode || 0;
+        if (cbStatus < 200 || cbStatus >= 300) throw new HttpError(502, `callback_url rejected the upload: HTTP ${cbStatus}`);
         sendJson(res, 200, { ok: true, output_r2_key: outputKey, ...facts, error: null });
         return;
       }
@@ -727,7 +931,7 @@ async function handleFrames(req, res) {
       const name = `f${i}.jpg`;
       const r = await run(
         FFMPEG,
-        ["-hide_banner", "-loglevel", "error", "-y", "-ss", num(atMs / 1000), "-i", dl.base,
+        ["-hide_banner", "-loglevel", "error", "-y", ...FILE_ONLY, "-ss", num(atMs / 1000), "-i", dl.base,
           "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "6", name],
         { cwd: dir, timeoutMs: 60_000 },
       );
@@ -780,8 +984,24 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+const HOST_IS_LOOPBACK = HOST === "localhost" || HOST === "::1" || HOST === "[::1]" || /^127\./.test(HOST);
+if (!TOKEN && !HOST_IS_LOOPBACK) {
+  process.stderr.write(
+    `Refusing to start: --host ${HOST} is not loopback and FFMPEG_SERVICE_TOKEN is not set.\n` +
+      `Set FFMPEG_SERVICE_TOKEN (the Worker sends it as a bearer token) or bind to 127.0.0.1.\n`,
+  );
+  process.exit(1);
+}
+
 server.requestTimeout = 0; // edits can take a couple of minutes
 server.headersTimeout = 60_000;
 server.listen(PORT, HOST, () => {
   log(`listening on http://${HOST}:${PORT} (auth ${TOKEN ? "on" : "off"}, font ${FONT_PATH ? "found" : "system default"})`);
+  if (!TOKEN) {
+    log("WARNING: FFMPEG_SERVICE_TOKEN is not set, so anyone who can reach this port can use the service. Do not expose it through a public tunnel without a token.");
+  }
+  if (ALLOW_PRIVATE) {
+    log("WARNING: --allow-private is ON: downloads from loopback and private addresses are permitted. LOCAL DEVELOPMENT ONLY; never run this way behind a public URL.");
+  }
+  log(ALLOWED_ORIGINS.size ? `download origins restricted to: ${[...ALLOWED_ORIGINS].join(", ")}` : "download origins: any public http(s) host (set FFMPEG_ALLOWED_ORIGINS to restrict)");
 });

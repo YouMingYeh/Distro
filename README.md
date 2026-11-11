@@ -121,8 +121,19 @@ give the Worker its public URL:
 node scripts/ffmpeg-service.mjs --port 8788
 cloudflared tunnel --url http://127.0.0.1:8788    # prints an https://….trycloudflare.com URL
 npx wrangler secret put FFMPEG_SERVICE_URL        # paste the public HTTPS origin
-npx wrangler secret put FFMPEG_SERVICE_TOKEN      # optional, recommended; set the same value for the service
+npx wrangler secret put FFMPEG_SERVICE_TOKEN      # strongly recommended; set the same value for the service
 ```
+
+The service downloads the URLs it is given, so do not expose it openly. Start
+it with the same token and limit it to your Worker's origin:
+
+```bash
+FFMPEG_SERVICE_TOKEN=<token> FFMPEG_ALLOWED_ORIGINS=https://<worker>.workers.dev \
+  node scripts/ffmpeg-service.mjs --port 8788
+```
+
+It refuses private, loopback and link-local addresses unless started with
+`--allow-private`, which is for local development only.
 
 A quick tunnel URL changes every time `cloudflared` restarts. Update
 `FFMPEG_SERVICE_URL` when it does, or use a named tunnel or a small VM for a
