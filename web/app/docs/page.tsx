@@ -421,7 +421,7 @@ Show me a dry run of posting it to TikTok.`}</Block>
             </p>
             <h3>Profiles</h3>
             <p>
-              A profile groups the accounts of one brand or client. Every workspace starts with one named Default. Tools that touch
+              A profile groups the accounts of one brand or client, one account per platform. Every workspace starts with one named Default. Tools that touch
               accounts take an optional <C>profile</C>, by id or by name. Leave it out and the default profile is used. A workspace can
               hold 50 profiles.
             </p>

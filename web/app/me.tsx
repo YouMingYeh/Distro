@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, ChatCircle, CheckCircle, Eye, Globe, Heart, Plus, WarningCircle } from "@phosphor-icons/react";
 import { CopyButton } from "./code-tabs";
 import { ROWS } from "./connect-panel";
@@ -81,22 +81,77 @@ function AccountRow({ account: a, name, path, href }: { account: Account; name: 
           </a>
         </>
       ) : (
-        <>
-          <span className="inline-flex items-center gap-1.5 text-sm text-accent">
-            <CheckCircle size={16} weight="fill" />
-            Connected
-          </span>
-          <a
-            href={href}
-            aria-label={`Connect another ${name} account`}
-            title={`Connect another ${name} account`}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line text-muted transition hover:border-fg hover:text-fg active:scale-[0.98]"
-          >
-            <Plus size={14} />
-          </a>
-        </>
+        <span className="inline-flex items-center gap-1.5 text-sm text-accent">
+          <CheckCircle size={16} weight="fill" />
+          Connected
+        </span>
       )}
     </li>
+  );
+}
+
+/** One pill per profile, then New profile. A profile holds one account per platform, so a second TikTok needs a second profile. */
+function ProfileTabs({ profiles, current, onPick, onAdd }: { profiles: Profile[]; current?: Profile; onPick: (id: string) => void; onAdd: (p: Profile) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [error, setError] = useState("");
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = String(new FormData(e.currentTarget).get("name") ?? "").trim();
+    if (!name) return;
+    const r = await fetch(`${API}/me/profiles?name=${encodeURIComponent(name)}`, { method: "POST", credentials: "include" }).then(
+      (res) => res.json(),
+      () => ({ error: "The server could not be reached." }),
+    );
+    if (r.error) return setError(r.error);
+    setNaming(false);
+    setError("");
+    onAdd({ ...r, accounts: [] });
+  }
+  return (
+    <div className="mb-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {profiles.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={p === current}
+            onClick={() => onPick(p.id)}
+            className={`${small} ${p === current ? "border-fg" : "text-muted"}`}
+          >
+            {p.name}
+          </button>
+        ))}
+        {naming ? (
+          <form onSubmit={create} className="flex items-center gap-2">
+            <input
+              name="name"
+              autoFocus
+              required
+              maxLength={60}
+              placeholder="Profile name"
+              aria-label="Profile name"
+              className="w-40 rounded-full border border-line bg-transparent px-3.5 py-1.5 text-sm outline-none focus:border-fg"
+            />
+            <button type="submit" className={small}>
+              Create
+            </button>
+            <button type="button" onClick={() => (setNaming(false), setError(""))} className="text-sm text-muted hover:text-fg">
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button type="button" onClick={() => setNaming(true)} className={`${small} text-muted`}>
+            <Plus size={14} />
+            New profile
+          </button>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-muted">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -352,7 +407,23 @@ function Notice({ title, children, action }: { title: string; children: string; 
 export function Dashboard() {
   const me = useMe();
   const signedIn = me?.sign_in && me.signed_in;
-  const profiles = (signedIn && me.profiles) || [];
+  const [added, setAdded] = useState<Profile[]>([]); // created on this page since /me loaded
+  // Kept for the tab, so returning from a platform's consent screen lands on the same profile.
+  const [picked, setPicked] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem("distro-profile");
+    } catch {
+      return null;
+    }
+  });
+  const pick = (id: string) => {
+    setPicked(id);
+    try {
+      sessionStorage.setItem("distro-profile", id);
+    } catch {}
+  };
+  const profiles = [...((signedIn && me.profiles) || []), ...added];
+  const current = profiles.find((p) => p.id === picked) ?? profiles[0];
   const count = profiles.reduce((n, p) => n + (p.accounts?.length ?? 0), 0);
   // Signed out: go straight to sign-in. The backend sends the browser back to /dashboard afterwards.
   const signedOut = !!me?.sign_in && !me.signed_in;
@@ -393,14 +464,12 @@ export function Dashboard() {
         ) : !me.sign_in ? (
           <Notice title="No dashboard on this server">This server runs without sign-in, so there are no accounts to show here.</Notice>
         ) : (
+          <>
+          <ProfileTabs profiles={profiles} current={current} onPick={pick} onAdd={(p) => (setAdded((a) => [...a, p]), pick(p.id))} />
           <div className="grid items-start gap-4 md:grid-cols-[1.5fr_1fr]">
             <div className="grid min-w-0 grid-cols-1 gap-4">
-              {profiles.map((p) => (
-                <Fragment key={p.id}>
-                  <ProfilePanel profile={p} />
-                  {!!p.accounts?.length && <Posts profileId={p.id} />}
-                </Fragment>
-              ))}
+              {current && <ProfilePanel profile={current} />}
+              {!!current?.accounts?.length && <Posts key={current.id} profileId={current.id} />}
             </div>
             <div className="grid min-w-0 grid-cols-1 gap-4">
               <ApiKeys keys={me.api_keys ?? []} />
@@ -417,6 +486,7 @@ export function Dashboard() {
               </section>
             </div>
           </div>
+          </>
         )}
       </main>
     </>

@@ -113,7 +113,7 @@ export const TOOLS: Record<string, Tool> = {
   }),
   connect_account: tool({
     scope: "accounts",
-    description: "Get a link the user opens to connect a social account. Give the link to the user; the account is linked once they approve.",
+    description: "Get a link the user opens to connect a social account. Give the link to the user; the account is linked once they approve. A profile holds one account per platform: for a second account on the same platform, use another profile.",
     input: { platform, profile },
     run: async (ws, a) => {
       const p = await useProfile(ws, a.profile);

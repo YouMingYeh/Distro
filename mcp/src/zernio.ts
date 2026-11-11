@@ -28,6 +28,13 @@ export async function deleteZernioProfile(zernioId: string): Promise<void> {
 
 /** `back` is appended to our own callback URL, so the callback knows which page started the flow. */
 export async function connectUrl(zernioId: string, platform: Platform, origin: string, back = ""): Promise<string> {
+  // A profile holds one account per platform. An inactive one may be linked again.
+  const taken = (await listAccounts(zernioId)).find((a) => a.platform === platform && a.active !== false);
+  if (taken) {
+    throw new Error(
+      `This profile already has a ${platform} account${taken.username ? ` (@${taken.username})` : ""}. A profile holds one account per platform: connect the second one in another profile (create_profile).`,
+    );
+  }
   const query = new URLSearchParams({ profileId: zernioId, redirect_url: `${origin}/connect/callback?platform=${platform}${back}` });
   const { authUrl } = await call<{ authUrl: string }>(`/connect/${platform}?${query}`);
   return authUrl;

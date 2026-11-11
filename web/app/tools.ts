@@ -46,7 +46,7 @@ export const GROUPS: Group[] = [
       {
         name: "connect_account",
         summary: "Returns a consent link for a platform. The user approves and the account is linked.",
-        detail: "The agent hands the link to the user. Nothing is linked until the user approves on the platform's own consent screen.",
+        detail: "The agent hands the link to the user. Nothing is linked until the user approves on the platform's own consent screen. A profile holds one account per platform; link a second one in another profile.",
         params: [["platform", "enum", "required", "tiktok, instagram, youtube, twitter or threads."], PROFILE],
         returns: `{
   "platform": "tiktok",

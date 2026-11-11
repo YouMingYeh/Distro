@@ -1,7 +1,7 @@
 import { AuthorizationError, CimdFetchError, type ConsentDescription } from "@cloudflare/workers-oauth-provider";
 import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
 import { listApiKeys } from "./apikeys";
-import { readProfiles, useProfile } from "./profiles";
+import { createProfile, readProfiles, useProfile } from "./profiles";
 import { remoteCallback, SERVICES, type Service } from "./remote";
 import { videoFile } from "./inference";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
@@ -147,6 +147,21 @@ async function mePosts(req: Request, url: URL): Promise<Response> {
   // null means Zernio could not be asked, as in /me.
   const posts = profile.zernio_id ? await listPosts(profile.zernio_id).catch(() => null) : [];
   return Response.json({ posts }, { headers });
+}
+
+/** The dashboard's New profile form. The session cookie authorizes it, so only the site's own origin may call. */
+async function meCreateProfile(req: Request, url: URL): Promise<Response> {
+  const headers = siteHeaders();
+  if (req.headers.get("Origin") !== env.WEB_ORIGIN) return Response.json({ error: "Forbidden." }, { status: 403, headers });
+  const ws = env.CLERK_ISSUER ? await workspace(req) : null;
+  if (!ws) return Response.json({ error: "Not signed in." }, { status: 401, headers });
+  const name = (url.searchParams.get("name") ?? "").trim().slice(0, 60);
+  if (!name) return Response.json({ error: "Give the profile a name." }, { status: 400, headers });
+  try {
+    return Response.json(await createProfile(ws.id, name), { headers });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Could not create the profile." }, { status: 400, headers });
+  }
 }
 
 async function me(req: Request): Promise<Response> {
@@ -352,6 +367,7 @@ export const authHandler = {
     if (url.pathname === "/signout") return signOut(req);
     if (url.pathname === "/me" && req.method === "GET") return me(req);
     if (url.pathname === "/me/posts" && req.method === "GET") return mePosts(req, url);
+    if (url.pathname === "/me/profiles" && req.method === "POST") return meCreateProfile(req, url);
     if (url.pathname === "/connect/callback") return connectCallback(url);
     const service = SERVICES.find((s) => url.pathname === `/${s.id}/callback`);
     if (service) return serviceReturn(service, url);
