@@ -29,6 +29,12 @@ export interface Env {
   /** Secret: encrypts what users store here (their scraper keys, their DarkUGC tokens). Random, e.g. `openssl rand -base64 32`.
    *  Unset means nothing can be saved. Changing it makes everything saved so far unreadable. */
   KEYS_ENCRYPTION_KEY?: string;
+  /** The video model server (docs/MODEL_SERVER.md): its base URL (a var) and bearer token (a secret).
+   *  Unset means the video tools answer "not configured". */
+  MODEL_SERVER_URL?: string;
+  MODEL_SERVER_TOKEN?: string;
+  /** Videos a workspace may start per day. Default 5. */
+  FREE_DAILY_VIDEOS?: string;
   /** Research calls a workspace may make per day on the keys above. Its own keys (connect_keys) are not counted. Default 20. */
   FREE_DAILY_CALLS?: string;
 }

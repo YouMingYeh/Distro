@@ -4,7 +4,7 @@ import { z } from "zod";
 import { accountRoute } from "./apikeys";
 import { darkugcCall, darkugcConnectUrl, darkugcTools } from "./darkugc";
 import { env, PLATFORMS, type Props, type Scope } from "./env";
-import { generateVideo, getJob, MODELS } from "./inference";
+import { generateVideo, getJob, listModels } from "./inference";
 import { KEY_NAMES, keysLink, userKeys, withKeys } from "./keys";
 import { findViral, getHook, KEY_SERVICES, PROVIDER_IDS, scrapePage, searchWeb, VIDEO_KEYS, WEB_IDS, WEB_KEYS } from "./scrapers";
 import { createProfile, deleteProfile, listProfiles, renameProfile, useProfile } from "./profiles";
@@ -69,23 +69,31 @@ export const TOOLS: Record<string, Tool> = {
   }),
   list_models: tool({
     scope: "video",
-    description: "List the generation models this server can call.",
-    input: { kind: z.enum(["video", "audio"]).optional() },
-    run: async (_ws, a) => ({ models: MODELS.filter((m) => !a.kind || m.kind === a.kind) }),
+    description: "List the video models generate_video can run, with a price estimate for 5 seconds at 720p, and which model each tier (fast, default, quality) picks.",
+    input: {},
+    run: () => listModels(),
   }),
   generate_video: tool({
     scope: "video",
-    description: "Start a video generation job. Returns a job_id right away; poll get_job for the result.",
+    description:
+      "Start a video generation job. Returns a job_id right away; poll get_job every 10 to 30 seconds (a render takes 40 seconds to 4 minutes). Settings a model does not support are moved to its nearest option and listed in `warnings`. This costs money: each workspace gets a few videos a day, and dry_run true returns the price estimate without starting anything.",
     input: {
-      model: z.enum(MODELS.map((m) => m.id) as [string, ...string[]]).default(MODELS[0].id),
-      prompt: z.string().min(1).max(2000),
+      model: z.string().regex(/^[A-Za-z0-9._-]{1,80}$/).default("fast").describe("A model id from list_models, or a tier: fast, default, quality."),
+      prompt: z.string().min(1).max(2000).describe("What the video shows and what the person says."),
+      duration: z.number().int().min(1).max(15).default(5).describe("Seconds."),
+      aspect: z.enum(["9:16", "16:9", "1:1"]).default("9:16"),
+      resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
+      negative_prompt: z.string().max(1000).optional(),
+      first_frame: z.string().url().optional().describe("Public image URL to start from (image-to-video)."),
+      audio_url: z.string().url().optional().describe("Public wav or mp3 that drives lip sync. Wan models only."),
+      dry_run: z.boolean().default(false),
     },
     run: (ws, a) => generateVideo(ws, a),
   }),
   get_job: tool({
     scope: "video",
-    description: "Status of a generation job, and the video URL once it is ready.",
-    input: { job_id: z.string().regex(/^job_[0-9a-f-]+$/) },
+    description: "Status of a generation job (queued, submitted, processing, downloading, then ready, failed or timeout), and the video URL once it is ready. The URL is public and can go straight to publish.",
+    input: { job_id: z.string().regex(/^job_[0-9a-f]{12}$/) },
     run: (ws, a) => getJob(ws, a.job_id),
   }),
   find_viral_videos: tool({

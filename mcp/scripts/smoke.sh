@@ -43,10 +43,13 @@ mcp() { curl -s "$BASE/mcp" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: 
 rest() { curl -s "$BASE/api/tools/$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$2"; }
 
 mcp '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | grep -q '"connect_account"' || fail "tools/list"
-mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"generate_video","arguments":{"prompt":"a cat"}}}' \
-  | grep -q 'job_' || fail "MCP generate_video"
-JOB=$(rest generate_video '{"prompt":"a cat"}' | json "['job_id']")
-rest get_job "{\"job_id\":\"$JOB\"}" | grep -q '"queued"' || fail "REST get_job"
+# video: dry_run only, so the check never starts a paid render. Needs MODEL_SERVER_TOKEN on the Worker.
+mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"generate_video","arguments":{"prompt":"a cat","dry_run":true}}}' \
+  | grep -q 'est_usd' || fail "MCP generate_video"
+rest list_models '{}' | grep -q '"fast"' || fail "REST list_models"
+rest generate_video '{"prompt":"a cat","dry_run":true}' | grep -q '"dry_run":true' || fail "REST generate_video"
+rest get_job '{"job_id":"job_000000000000"}' | grep -q 'Unknown job' || fail "another workspace's job is readable"
+curl -s -o /dev/null -w '%{http_code}' "$BASE/videos/job_000000000000.mp4" | grep -q 404 || fail "video link for a job that does not exist"
 mcp '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' | grep -q '"find_viral_videos"' || fail "research tools not listed"
 rest darkugc_call '{"tool":"top_hooks"}' | grep -q 'not connected' || fail "darkugc without sign-in"
 KEYS_URL=$(rest connect_keys '{}' | json "['url']")

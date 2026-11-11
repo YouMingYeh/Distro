@@ -17,11 +17,15 @@
   //   SCRAPECREATORS_API_KEY, BYCRAWL_API_KEY, OMNISCRAPE_API_KEY, ENSEMBLEDATA_TOKEN, APIFY_TOKEN
   // Page scrapers, each optional; scrape_page and web_search try them in this order:
   //   FIRECRAWL_API_KEY, JINA_API_KEY, TAVILY_API_KEY, EXA_API_KEY
+  // Video models (list_models, generate_video, get_job): the secret MODEL_SERVER_TOKEN, for the
+  //   server at MODEL_SERVER_URL below (docs/MODEL_SERVER.md). Each workspace may start
+  //   FREE_DAILY_VIDEOS videos a day (default 5).
   // Required to store anything a user connects (their keys, their DarkUGC sign-in): KEYS_ENCRYPTION_KEY (openssl rand -base64 32)
   // Users can add their own keys for any of these (connect_keys). Calls on the keys above are
   // limited per workspace per day: set the var FREE_DAILY_CALLS to change the default of 20.
   "vars": {
     "ORIGIN": "https://mcp.trydistro.app",
-    "WEB_ORIGIN": "https://trydistro.app"
+    "WEB_ORIGIN": "https://trydistro.app",
+    "MODEL_SERVER_URL": "https://distro-model-417048709195.asia-east1.run.app"
   }
 }

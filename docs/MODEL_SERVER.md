@@ -8,6 +8,33 @@ It covers 101 GMI video models; 38 of them do text-to-video at 9:16.
 - Code: `model_server/` (Python, FastAPI)
 - Model catalog: `src/data/gmi-video-models.json`
 
+## Through Distro (MCP, REST, CLI)
+
+Users do not call this server or hold its token. The Distro Worker (`mcp/`) calls it for
+them through three tools, which need the `video` scope:
+
+| Tool | Calls | Notes |
+|---|---|---|
+| `list_models` | `GET /models` | |
+| `generate_video` | `POST /generate` | Takes `model`, `prompt`, `duration`, `aspect`, `resolution`, `negative_prompt`, `first_frame`, `audio_url`, `dry_run`. `model` defaults to `fast`. |
+| `get_job` | `GET /jobs/{id}` | Only answers for jobs the same workspace started. |
+
+```bash
+distro call generate_video '{"prompt": "Vertical selfie video, a young adult says: why did nobody tell me about this app?"}'
+distro call get_job '{"job_id": "job_..."}'
+```
+
+- When a job is ready, `video_url` is `https://mcp.trydistro.app/videos/<job_id>.mp4`. It
+  needs no token, so it can go straight to `publish`. Anyone who has the link can watch
+  the video.
+- Each workspace may start 5 videos a day (`FREE_DAILY_VIDEOS` on the Worker). A
+  `dry_run` does not count. The spend cap below still applies to everyone together.
+- The Worker reads the var `MODEL_SERVER_URL` (in `mcp/wrangler.jsonc`) and the secret
+  `MODEL_SERVER_TOKEN`. After rotating the token, update `mcp/.env.production` and run
+  `pnpm secrets` in `mcp/`.
+
+The rest of this page is the server's own API, for calling it directly.
+
 ## Quick start
 
 ```bash

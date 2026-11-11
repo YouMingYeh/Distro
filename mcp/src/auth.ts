@@ -3,6 +3,7 @@ import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
 import { listApiKeys } from "./apikeys";
 import { readProfiles, useProfile } from "./profiles";
 import { darkugcCallback } from "./darkugc";
+import { videoFile } from "./inference";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
 import { KEY_SERVICES } from "./scrapers";
 import { connectUrl, listAccounts } from "./zernio";
@@ -331,6 +332,8 @@ export const authHandler = {
     if (url.pathname === "/keys") return keysPage(req, url);
     const platform = url.pathname.match(/^\/connect\/([a-z]+)$/)?.[1];
     if (platform && req.method === "GET") return connectStart(req, platform);
+    const video = url.pathname.match(/^\/videos\/(job_[0-9a-f]{12})\.mp4$/)?.[1];
+    if (video && req.method === "GET") return videoFile(video);
     if (url.pathname === "/health") return Response.json({ ok: true });
     if (url.pathname === "/") return Response.redirect(env.WEB_ORIGIN, 302);
     return new Response("Not found", { status: 404 });
