@@ -17,3 +17,6 @@ dist/
 .playwright-mcp/
 .vercel/
 .next/
+bench_out/
+model_server/data/
+__pycache__/
