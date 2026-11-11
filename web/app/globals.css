@@ -1,10 +1,9 @@
 @import "tailwindcss";
 
-/* One cool-neutral palette, one accent (signal green), auto light/dark.
-   Shape rule: interactive controls are full-pill, panels and code are 12px. */
 :root {
-  --bg: #f4f4f5;
-  --surface: #fafafa;
+  color-scheme: light dark;
+  --bg: #f8f8f9;
+  --surface: #fff;
   --fg: #18181b;
   --muted: #52525b;
   --line: #d4d4d8;
@@ -18,7 +17,7 @@
     --fg: #ededf0;
     --muted: #a1a1aa;
     --line: #2a2a30;
-    --accent: #3ddc97;
+    --accent: #8dc0aa;
   }
 }
 
@@ -43,16 +42,325 @@ body {
   outline-offset: 2px;
 }
 
-/* Hero load-in: draws the eye copy first, then the live panel. */
-@media (prefers-reduced-motion: no-preference) {
-  .rise {
-    animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-    animation-delay: calc(var(--i, 0) * 80ms);
+.agent-demo-scene {
+  --demo-titlebar: color-mix(in srgb, var(--surface) 92%, var(--fg));
+  --demo-task: color-mix(in srgb, var(--surface) 88%, var(--fg));
+  --demo-row: color-mix(in srgb, var(--surface) 96%, var(--fg));
+  container-type: inline-size;
+  width: 100%;
+  max-width: 32rem;
+  min-width: 0;
+  justify-self: center;
+}
+
+.agent-demo-connection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-block-end: 0.5rem;
+}
+
+.agent-demo-tile,
+.agent-demo-satellite {
+  display: grid;
+  place-items: center;
+}
+
+.agent-demo-tile {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 10px 22px rgb(0 0 0 / 0.24), 0 2px 5px rgb(0 0 0 / 0.14);
+}
+
+.agent-demo-distro {
+  rotate: -5deg;
+}
+
+.agent-demo-mcp {
+  border-color: #3a3a3a;
+  background: #000;
+  color: #fff;
+  rotate: 5deg;
+}
+
+.agent-demo-link {
+  position: relative;
+  width: 4.5rem;
+  height: 1px;
+}
+
+.agent-demo-link i {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: agent-demo-packet 2.7s linear infinite;
+}
+
+.agent-demo-link i:nth-child(2) { animation-delay: -0.9s; }
+.agent-demo-link i:nth-child(3) { animation-delay: -1.8s; }
+
+@keyframes agent-demo-packet {
+  0% { opacity: 0; transform: translate(0, -50%); }
+  15%, 85% { opacity: 0.75; }
+  100% { opacity: 0; transform: translate(4.25rem, -50%); }
+}
+
+.agent-demo-stage {
+  --orbit-duration: 18s;
+  --orbit-radius-x: 49%;
+  --orbit-radius-y: 27%;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: clamp(16.5rem, 65cqi, 21rem);
+}
+
+@media (min-width: 75rem) {
+  .agent-demo-stage {
+    --orbit-radius-x: 55%;
   }
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(16px);
-    }
+}
+
+.agent-demo-satellite {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: var(--resting-depth);
+  width: clamp(2.625rem, 11.5cqi, 3.5rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 26%;
+  box-shadow: 0 9px 15px -5px rgb(0 0 0 / 0.28);
+  pointer-events: none;
+  offset-path: ellipse(var(--orbit-radius-x) var(--orbit-radius-y) at 50% 50%);
+  offset-rotate: 0deg;
+  offset-distance: calc(var(--phase) * 100%);
+  animation: agent-demo-orbit var(--orbit-duration) linear infinite, agent-demo-depth var(--orbit-duration) steps(1) infinite;
+  animation-delay: calc(var(--phase) * var(--orbit-duration) * -1);
+}
+
+.agent-demo-app-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  scale: 1.08;
+}
+
+.agent-demo-satellite-codex .agent-demo-app-icon {
+  scale: 1.32;
+}
+
+.agent-demo-satellite-youtube {
+  background: #ff0033;
+}
+
+.agent-demo-satellite-youtube .agent-demo-app-icon {
+  width: 72%;
+  height: auto;
+  object-fit: contain;
+  scale: 1;
+}
+
+@keyframes agent-demo-orbit {
+  0% { offset-distance: 0%; opacity: 0.92; scale: 0.94; }
+  25% { opacity: 1; scale: 1.2; }
+  50% { opacity: 0.92; scale: 0.94; }
+  75% { opacity: 0.74; scale: 0.76; }
+  100% { offset-distance: 100%; opacity: 0.92; scale: 0.94; }
+}
+
+@keyframes agent-demo-depth {
+  0%, 100% { z-index: 3; }
+  50% { z-index: 1; }
+}
+
+.agent-demo-window {
+  position: relative;
+  z-index: 2;
+  width: min(80%, 23rem);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.22), 0 3px 8px rgb(0 0 0 / 0.12);
+}
+
+.agent-demo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.5rem clamp(0.6875rem, 3.2cqi, 1rem);
+  border-bottom: 1px solid var(--line);
+  background: var(--demo-titlebar);
+}
+
+.agent-demo-dots {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.3125rem;
+}
+
+.agent-demo-dots i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.agent-demo-dots i:nth-child(2) { background: #febc2e; }
+.agent-demo-dots i:nth-child(3) { background: #28c840; }
+
+.agent-demo-endpoint {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--demo-task);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-demo-body {
+  padding: 0.75rem clamp(0.6875rem, 3.2cqi, 1rem);
+}
+
+.agent-demo-task {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4375rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.5rem;
+  background: var(--demo-task);
+  font-size: clamp(0.75rem, 3.2cqi, 0.875rem);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.agent-demo-task-label {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.agent-demo-typing {
+  display: grid;
+  min-width: 0;
+}
+
+.agent-demo-typing-full,
+.agent-demo-typing-progress {
+  grid-area: 1 / 1;
+  white-space: pre-wrap;
+}
+
+.agent-demo-typing-full {
+  opacity: 0;
+}
+
+.agent-demo-typing-caret {
+  position: relative;
+}
+
+.agent-demo-typing-caret::after {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.12em;
+  width: 1px;
+  height: 1em;
+  background: currentColor;
+  content: "";
+}
+
+@media (prefers-reduced-motion: reduce), (scripting: none) {
+  .agent-demo-typing-full {
+    opacity: 1;
   }
+
+  .agent-demo-typing-progress {
+    display: none;
+  }
+}
+
+.agent-demo-steps {
+  display: grid;
+  gap: 0.25rem;
+  margin-block: 0.625rem;
+}
+
+.agent-demo-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--demo-row);
+}
+
+.agent-demo-step-text {
+  display: grid;
+  font-size: clamp(0.625rem, 2.7cqi, 0.75rem);
+  line-height: 1.25;
+}
+
+.agent-demo-step-text span {
+  color: var(--muted);
+}
+
+.agent-demo-check {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  color: var(--accent);
+  animation: agent-demo-confirm 0.4s ease-out both;
+  animation-delay: calc(0.3s + var(--step) * 0.55s);
+}
+
+@keyframes agent-demo-confirm {
+  from { opacity: 0.55; scale: 0.8; }
+  to { opacity: 1; scale: 1; }
+}
+
+.agent-demo-result {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@supports not (offset-path: ellipse(49% 27% at 50% 50%)) {
+  .agent-demo-satellite {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-demo-link i,
+  .agent-demo-satellite,
+  .agent-demo-check {
+    animation: none;
+  }
+
+  .agent-demo-link i {
+    top: 0;
+    left: 25%;
+    transform: translateY(-50%);
+  }
+
+  .agent-demo-link i:nth-child(2) { left: 50%; }
+  .agent-demo-link i:nth-child(3) { left: 75%; }
 }

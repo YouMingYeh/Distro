@@ -1,14 +1,24 @@
 import { Suspense } from "react";
-import { ArrowRight, GithubLogo } from "@phosphor-icons/react/dist/ssr";
-import { Code, CodeTabs, CopyButton } from "./code-tabs";
+import { CaretDown, GithubLogo } from "@phosphor-icons/react/dist/ssr";
+import { AgentDemo } from "./agent-demo";
+import { Code, CodeTabs, CopyableLine } from "./code-tabs";
 import { ConnectPanel } from "./connect-panel";
+import { DistroMascot } from "./distro-mascot";
 import { SignInButton } from "./me";
 import { isPlatform } from "./platforms";
+import { SetupTabs } from "./setup-tabs";
 import { GROUPS } from "./tools";
+import "./distro-brand.css";
 
 const BASE = process.env.NEXT_PUBLIC_DISTRO_URL?.replace(/\/$/, "") || "https://mcp.trydistro.app";
+const MCP_URL = `${BASE}/mcp`;
 const REPO = "https://github.com/YouMingYeh/Distro";
-const INSTALL = `claude mcp add --transport http distro ${BASE}/mcp`;
+
+const CAPABILITIES = [
+  ["Connect your accounts", "Link the social accounts your agent can publish to."],
+  ["Generate a video", "Give your agent a prompt and render a short clip."],
+  ["Publish on your schedule", "Preview the post, then publish now or schedule it for later."],
+];
 
 const FLOWS = [
   {
@@ -179,12 +189,8 @@ POST /oauth/token
 POST /mcp
      Authorization: Bearer <access_token>`;
 
-const primary =
-  "inline-flex items-center gap-2 rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-bg transition hover:opacity-90 active:scale-[0.98]";
-const secondary =
-  "inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-medium transition hover:border-fg active:scale-[0.98]";
-const h2 = "text-3xl font-semibold tracking-tight md:text-4xl";
-const shell = "mx-auto w-full max-w-7xl px-4 md:px-8";
+const shell = "mx-auto w-full max-w-6xl px-5 sm:px-8";
+const sectionHeading = "text-2xl font-semibold tracking-tight sm:text-3xl";
 
 // Reads the callback params after a platform redirect; streamed so the page itself stays static.
 async function Accounts({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
@@ -199,159 +205,139 @@ async function Accounts({ searchParams }: Pick<PageProps<"/">, "searchParams">) 
 export default function Page({ searchParams }: PageProps<"/">) {
   return (
     <>
-      <header className={`${shell} flex h-16 items-center justify-between`}>
-        <a href="#" className="text-lg font-semibold tracking-tight">
-          Distro
-        </a>
-        <nav className="flex items-center gap-6 text-sm">
-          <a href="#tools" className="hidden text-muted transition hover:text-fg md:block">
-            Tools
+      <header className="border-b border-line">
+        <div className={`${shell} flex h-16 items-center justify-between`}>
+          <a href="/" className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight">
+            <DistroMascot className="size-8 shrink-0" />
+            Distro
           </a>
-          <a href="#interfaces" className="hidden text-muted transition hover:text-fg md:block">
-            Interfaces
-          </a>
-          <a href="#auth" className="hidden text-muted transition hover:text-fg md:block">
-            Auth
-          </a>
-          <a href="/docs" className="text-muted transition hover:text-fg">
-            Docs
-          </a>
-          <span className="hidden sm:block">
-            <a href="#install" className={primary}>
-              Add to your agent
+          <nav aria-label="Main" className="flex items-center gap-3 text-sm sm:gap-5">
+            <a href="#install" className="hidden text-muted transition-colors hover:text-fg md:inline">Setup</a>
+            <a href="#tools" className="hidden text-muted transition-colors hover:text-fg md:inline">Tools</a>
+            <a href="/docs" className="text-muted transition-colors hover:text-fg">Docs</a>
+            <a href={REPO} aria-label="GitHub" className="inline-flex items-center gap-2 text-muted transition-colors hover:text-fg">
+              <GithubLogo size={17} aria-hidden />
+              <span className="hidden sm:inline">GitHub</span>
             </a>
-          </span>
-          <SignInButton />
-        </nav>
+            <SignInButton />
+          </nav>
+        </div>
       </header>
 
-      <main>
-        <section className={`${shell} grid items-center gap-12 py-14 md:grid-cols-[1.15fr_1fr] md:gap-16 md:py-20`}>
-          <div>
-            <h1 className="rise text-5xl font-semibold leading-[1.02] tracking-tighter md:text-7xl">
-              Social ads infra for agents.
+      <main className={shell}>
+        <section aria-labelledby="hero-title" className="distro-hero">
+          <div className="w-full min-w-0 text-center">
+            <h1 id="hero-title" className="distro-hero-title">
+              <span>MEET</span>{" "}
+              <DistroMascot className="distro-hero-mascot" expression="greet" />{" "}
+              <span>DISTRO</span>
             </h1>
-            <p className="rise mt-6 max-w-[46ch] text-lg leading-relaxed text-muted" style={{ "--i": 1 } as React.CSSProperties}>
-              Give any agent the tools to connect social accounts, call video models, publish short-form video and run paid ads on it.
+            <p className="mx-auto mt-5 max-w-[52ch] text-pretty leading-relaxed text-muted sm:mt-6 sm:text-lg">
+              Turn a prompt into a short-form video. Preview, schedule, and publish to your connected social accounts, all from your AI agent.
             </p>
-            <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 2 } as React.CSSProperties}>
-              <a href="#install" className={primary}>
-                Add to your agent
-                <ArrowRight size={16} />
-              </a>
-              <a href={REPO} className={secondary}>
-                <GithubLogo size={16} />
-                GitHub
-              </a>
+            <div className="mx-auto mt-7 w-full max-w-md text-left">
+              <p className="mb-2 text-sm font-medium">MCP server URL</p>
+              <CopyableLine text={MCP_URL} label="Copy MCP server URL" primary />
             </div>
           </div>
-          <div className="rise" style={{ "--i": 3 } as React.CSSProperties}>
-            <Suspense fallback={<ConnectPanel api={BASE} />}>
-              <Accounts searchParams={searchParams} />
-            </Suspense>
-          </div>
+          <AgentDemo mcpUrl={MCP_URL} />
         </section>
 
-        <section id="tools" className={`${shell} scroll-mt-8 py-16 md:py-24`}>
-          <h2 className={h2}>Tools your agent can call.</h2>
-          <p className="mt-4 max-w-[60ch] text-muted">
-            Each tool does one job and returns structured JSON. Every call is scoped to the workspace that authorized it.{" "}
-            <a href="/docs#tools" className="text-fg underline underline-offset-4">
-              Arguments and results are in the docs.
-            </a>
-          </p>
-          <div className="mt-12 grid gap-4 md:grid-cols-2">
-            {GROUPS.map(({ group, tools }, i) => (
-              <div key={group} className={`rounded-xl p-6 ${i === 1 ? "bg-fg text-bg" : "border border-line bg-surface"}`}>
-                <h3 className="text-sm font-medium">{group}</h3>
-                <dl className={`mt-6 grid gap-6 ${i === 1 ? "sm:grid-cols-2" : ""}`}>
-                  {tools.map(({ name, summary }) => (
-                    <div key={name}>
-                      <dt className="font-mono text-sm">
-                        <a href={`/docs#${name}`} className="underline-offset-4 hover:underline">
-                          {name}
-                        </a>
-                      </dt>
-                      <dd className={`mt-1.5 text-sm leading-relaxed ${i === 1 ? "opacity-70" : "text-muted"}`}>{summary}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ))}
-          </div>
+        <section id="install" aria-labelledby="install-title" className="scroll-mt-8 pb-12 md:pb-20">
+          <h2 id="install-title" className={`${sectionHeading} mb-5`}>Connect your agent</h2>
+          <SetupTabs mcpUrl={MCP_URL} />
         </section>
 
-        {FLOWS.map(({ title, lead, steps }, i) => (
-          <section key={title} className={`border-line ${i ? "border-b" : "border-y"}`}>
-            <div className={`${shell} py-16 md:py-20`}>
-              <h2 className={h2}>{title}</h2>
-              <p className="mt-4 max-w-[60ch] text-muted">{lead}</p>
-              <dl className="mt-12 grid gap-8 md:grid-cols-3">
-                {steps.map(([name, desc]) => (
-                  <div key={name} className="border-l-2 border-accent pl-4">
-                    <dt className="text-lg font-medium">{name}</dt>
-                    <dd className="mt-1.5 max-w-[40ch] text-sm leading-relaxed text-muted">{desc}</dd>
+        <section id="tools" aria-labelledby="tools-title" className="scroll-mt-8 border-t border-line pb-14 pt-9 md:pb-20 md:pt-12">
+          <div className="distro-capabilities-card">
+            <div className="distro-capabilities-copy">
+              <h2 id="tools-title" className="distro-capabilities-title">What you can do</h2>
+              <dl className="mt-6 grid gap-4">
+                {CAPABILITIES.map(([name, description]) => (
+                  <div key={name}>
+                    <dt className="font-semibold">{name}</dt>
+                    <dd className="mt-0.5 text-pretty text-sm leading-relaxed text-muted sm:text-base">{description}</dd>
                   </div>
                 ))}
               </dl>
             </div>
-          </section>
-        ))}
-
-        <section id="interfaces" className={`${shell} scroll-mt-8 py-16 md:py-24`}>
-          <h2 className={h2}>Three ways in. Same tools.</h2>
-          <p className="mb-10 mt-4 max-w-[60ch] text-muted">
-            MCP for agents, REST for your own backend, and a Skill that teaches an agent the whole loop in plain language.
-          </p>
-          <CodeTabs samples={SAMPLES} />
-        </section>
-
-        <section id="auth" className={`${shell} grid scroll-mt-8 items-start gap-10 py-16 md:grid-cols-2 md:gap-16 md:py-24`}>
-          <div>
-            <h2 className={h2}>OAuth 2.0 on both sides.</h2>
-            <h3 className="mt-8 font-medium">Agent to Distro</h3>
-            <p className="mt-2 max-w-[52ch] leading-relaxed text-muted">
-              MCP clients discover the authorization server, identify themselves and get a scoped token with PKCE.
-              Nobody pastes an API key into a chat.
-            </p>
-            <h3 className="mt-6 font-medium">Distro to social platforms</h3>
-            <p className="mt-2 max-w-[52ch] leading-relaxed text-muted">
-              Accounts are linked on each platform&apos;s own consent screen, through Zernio. Platform tokens stay on
-              the server and never reach the agent.
-            </p>
-          </div>
-          <div className="min-w-0 rounded-xl border border-line bg-surface p-5 md:p-6">
-            <Code>{OAUTH_FLOW}</Code>
-          </div>
-        </section>
-
-        <section id="install" className="scroll-mt-8 border-t border-line">
-          <div className={`${shell} py-20 md:py-28`}>
-            <h2 className="text-4xl font-semibold tracking-tighter md:text-6xl">Add one URL.</h2>
-            <p className="mt-4 max-w-[52ch] text-muted">
-              Works with any client that speaks MCP over Streamable HTTP. On first use your agent opens a page where you sign in, with Google if you like, and approve.
-            </p>
-            <div className="mt-10 flex max-w-3xl items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 pl-5">
-              <code className="min-w-0 overflow-x-auto whitespace-nowrap font-mono text-sm">{INSTALL}</code>
-              <CopyButton text={INSTALL} />
+            <div className="distro-capabilities-art">
+              <DistroMascot className="distro-capabilities-mascot" expression="happy" lazy />
             </div>
           </div>
+
+          <div id="accounts" className="mt-9 scroll-mt-8">
+            <h3 className="mb-4 text-lg font-semibold tracking-tight">Social accounts</h3>
+            <Suspense fallback={<ConnectPanel api={BASE} />}>
+              <Accounts searchParams={searchParams} />
+            </Suspense>
+          </div>
+
+          <details className="group mt-8 border-y border-line">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+              Developer details
+              <CaretDown size={16} aria-hidden className="group-open:rotate-180" />
+            </summary>
+            <div className="space-y-9 border-t border-line py-6">
+              <div>
+                <h3 className="font-semibold">Tools</h3>
+                <p className="mb-4 mt-1 text-sm text-muted">
+                  Find arguments and results in the <a href="/docs#tools" className="text-fg underline underline-offset-4">tool reference</a>.
+                </p>
+                <div className="grid gap-5 md:grid-cols-3">
+                  {GROUPS.map(({ group, tools }) => (
+                    <div key={group}>
+                      <h4 className="mb-2 text-sm font-medium">{group}</h4>
+                      <dl className="space-y-3">
+                        {tools.map(({ name, summary }) => (
+                          <div key={name}>
+                            <dt className="font-mono text-[13px]">
+                              <a href={`/docs#${name}`} className="underline-offset-4 hover:underline">{name}</a>
+                            </dt>
+                            <dd className="mt-0.5 text-sm leading-relaxed text-muted">{summary}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {FLOWS.map(({ title, lead, steps }) => (
+                <div key={title}>
+                  <h3 className="font-semibold">{title}</h3>
+                  <p className="mb-3 mt-1 max-w-[65ch] text-sm leading-relaxed text-muted">{lead}</p>
+                  <dl className="grid gap-4 text-sm md:grid-cols-3">
+                    {steps.map(([name, description]) => (
+                      <div key={name}>
+                        <dt className="font-medium">{name}</dt>
+                        <dd className="mt-0.5 leading-relaxed text-muted">{description}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
+              <div id="interfaces">
+                <h3 className="mb-3 font-semibold">MCP, REST, and Skill examples</h3>
+                <CodeTabs samples={SAMPLES} />
+              </div>
+              <div id="auth">
+                <h3 className="mb-3 font-semibold">OAuth 2.0</h3>
+                <p className="mb-4 max-w-[65ch] text-sm leading-relaxed text-muted">
+                  Agents authorize with Distro using PKCE. Social accounts are linked on each platform&apos;s consent
+                  screen through Zernio. Platform tokens stay on the server.
+                </p>
+                <div className="rounded-lg border border-line bg-surface p-4">
+                  <Code>{OAUTH_FLOW}</Code>
+                </div>
+              </div>
+            </div>
+          </details>
         </section>
       </main>
-
-      <footer className={`${shell} flex flex-col gap-2 py-8 text-sm text-muted md:flex-row md:justify-between`}>
-        <p>Distro. Publishing runs on Zernio.</p>
-        <span className="flex gap-5">
-          <a href="/docs" className="transition hover:text-fg">
-            Docs
-          </a>
-          <a href="/privacy" className="transition hover:text-fg">
-            Privacy
-          </a>
-          <a href={REPO} className="transition hover:text-fg">
-            Source on GitHub
-          </a>
-        </span>
+      <footer className={`${shell} flex flex-wrap gap-x-5 gap-y-2 border-t border-line py-6 text-sm text-muted`}>
+        <p className="mr-auto">Distro. Publishing runs on Zernio.</p>
+        <a href="/privacy" className="transition-colors hover:text-fg">Privacy</a>
+        <a href={REPO} className="transition-colors hover:text-fg">Source on GitHub</a>
       </footer>
     </>
   );

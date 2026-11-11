@@ -1,23 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "@phosphor-icons/react";
 
-export function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+export function CopyButton({
+  text,
+  label = "Copy",
+  primary = false,
+}: {
+  text: string;
+  label?: string;
+  primary?: boolean;
+}) {
+  const [feedback, setFeedback] = useState("");
+  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(reset.current), []);
+
+  async function copy() {
+    clearTimeout(reset.current);
+    try {
+      await navigator.clipboard.writeText(text);
+      setFeedback("Copied");
+    } catch {
+      setFeedback("Copy failed");
+    }
+    reset.current = setTimeout(() => setFeedback(""), 2000);
+  }
+
   return (
-    <button
-      type="button"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-muted transition hover:text-fg active:scale-[0.98]"
-    >
-      {copied ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
-      <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
-    </button>
+    <span className="inline-flex shrink-0">
+      <button
+        type="button"
+        aria-label={label}
+        onClick={copy}
+        className={`inline-flex min-h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
+          primary ? "bg-fg text-bg hover:opacity-85" : "border border-line text-muted hover:bg-bg hover:text-fg"
+        }`}
+      >
+        {feedback === "Copied" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+        <span>{feedback || "Copy"}</span>
+      </button>
+      <span role="status" className="sr-only">{feedback}</span>
+    </span>
+  );
+}
+
+export function CopyableLine({ text, label, primary }: { text: string; label: string; primary?: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-line bg-surface p-2 pl-3.5">
+      <code tabIndex={0} className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[13px]">
+        {text}
+      </code>
+      <CopyButton key={text} text={text} label={label} primary={primary} />
+    </div>
   );
 }
 
@@ -70,9 +106,9 @@ export function CodeTabs({ samples }: { samples: Samples }) {
         <Tabs label="Action" items={actions} value={action} onChange={setAction} />
         <Tabs label="Interface" items={interfaces} value={iface} onChange={setIface} />
       </div>
-      <div className="relative p-5 md:p-6">
-        <div className="mb-3 flex justify-end md:absolute md:right-5 md:top-5 md:mb-0">
-          <CopyButton text={code} />
+      <div className="p-4 sm:p-6">
+        <div className="mb-2 flex justify-end">
+          <CopyButton key={code} text={code} label="Copy example" />
         </div>
         <div role="tabpanel" className="min-h-[17rem]">
           <Code>{code}</Code>

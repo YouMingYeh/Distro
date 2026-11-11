@@ -1,5 +1,6 @@
 import { ArrowUpRight, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { siInstagram, siThreads, siTiktok, siX, siYoutube } from "simple-icons";
+import { ConnectionReturn } from "./connection-return";
 import type { Platform } from "./platforms";
 
 export const ROWS: { id: Platform; name: string; path: string }[] = [
@@ -24,43 +25,54 @@ export function ConnectPanel({
   failed?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-2 shadow-[0_24px_60px_-30px_color-mix(in_srgb,var(--fg)_35%,transparent)]">
-      <div className="flex items-baseline justify-between px-4 pb-2 pt-3">
-        <h2 className="text-sm font-medium">Accounts</h2>
-        <p className="font-mono text-xs text-muted">connect_account</p>
-      </div>
-      <ul>
+    <div className="rounded-xl border border-line bg-surface">
+      {failed && (
+        <p
+          id="account-connection-result"
+          role="alert"
+          tabIndex={-1}
+          className="border-b border-line px-4 py-3 text-sm sm:px-5"
+        >
+          Connection failed. Try connecting again.
+        </p>
+      )}
+      <ul className="divide-y divide-line">
         {ROWS.map((row) => {
           const done = connected?.platform === row.id;
           return (
-            <li key={row.id} className="flex h-14 items-center gap-3 rounded-lg px-4 transition hover:bg-bg">
+            <li key={row.id} className="flex min-h-14 items-center gap-3 px-4 py-2 sm:px-5">
               <svg viewBox="0 0 24 24" aria-hidden className="size-5 shrink-0 fill-current">
                 <path d={row.path} />
               </svg>
-              <span className="flex-1 text-sm">{row.name}</span>
+              <span className="shrink-0 text-sm">{row.name}</span>
               {done ? (
-                <span className="inline-flex items-center gap-1.5 text-sm text-accent">
-                  <CheckCircle size={16} weight="fill" />
-                  {connected.username ? `@${connected.username}` : "Connected"}
+                <span
+                  id={failed ? undefined : "account-connection-result"}
+                  role="status"
+                  tabIndex={-1}
+                  className="ml-auto flex min-w-0 items-center gap-1.5 rounded-sm text-sm text-accent"
+                >
+                  <CheckCircle size={16} weight="fill" aria-hidden className="shrink-0" />
+                  <span className="[overflow-wrap:anywhere]">
+                    <span className="sr-only">{row.name} connected. </span>
+                    {connected.username ? `@${connected.username}` : "Connected"}
+                  </span>
                 </span>
               ) : (
                 <a
                   href={`${api}/connect/${row.id}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-line px-3.5 py-1.5 text-sm transition hover:border-fg active:scale-[0.98]"
+                  aria-label={`Connect ${row.name}`}
+                  className="ml-auto inline-flex min-h-9 items-center gap-1 rounded-md border border-line px-3 text-sm transition-colors hover:bg-bg"
                 >
                   Connect
-                  <ArrowUpRight size={14} />
+                  <ArrowUpRight size={14} aria-hidden />
                 </a>
               )}
             </li>
           );
         })}
       </ul>
-      <p className="px-4 pb-3 pt-2 text-xs leading-5 text-muted">
-        {failed
-          ? "That connection did not go through. Nothing was linked, so it is safe to try again."
-          : "You approve on the platform's own consent screen. Tokens stay on the server."}
-      </p>
+      {(failed || connected) && <ConnectionReturn />}
     </div>
   );
 }
