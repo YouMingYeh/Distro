@@ -237,7 +237,10 @@ curl -s "$MODEL_SERVER/generate?wait=true" -H "Authorization: Bearer $MODEL_SERV
 Every job reserves its list-price estimate before it is sent to GMI. GMI keeps
 generating even when the account balance is negative, so this cap is the real limit.
 
-- Total cap: `SPEND_CAP_USD`, default $9. A job that would pass it gets `402`.
+- Total cap: `SPEND_CAP_USD` (code default $9). **The Cloud Run deployment is set to $15**
+  (raised 2026-11-11). A job that would pass it gets `402`. To change it:
+  `gcloud run services update distro-model --project distro-model-66ada6 --region asia-east1 --update-env-vars SPEND_CAP_USD=<usd>`.
+  The ledger keeps its history; only the limit changes.
 - Per-job limit: `MAX_RENDER_USD`, default $1.00.
 - `GET /spend` shows what is committed, reserved and left.
 
@@ -339,4 +342,4 @@ script calls GMI directly, so its spend is not recorded in the server's ledger.
 `model_worker/` is a TypeScript port with the same API: a Durable Object per job polls
 GMI with `alarm()`, and videos go to R2. It has not been type-checked or deployed. See
 `model_worker/README.md`. If it replaces Cloud Run, carry over the committed spend from
-`GET /spend` and run only one of the two at a time, or the $9 cap is counted twice.
+`GET /spend` and run only one of the two at a time, or the spend cap is counted twice.

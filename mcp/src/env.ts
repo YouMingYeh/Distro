@@ -33,6 +33,10 @@ export interface Env {
    *  Unset means the video tools answer "not configured". */
   MODEL_SERVER_URL?: string;
   MODEL_SERVER_TOKEN?: string;
+  /** R2 bucket for files users upload (create_upload). Unset means create_upload answers "not configured". */
+  UPLOADS?: R2Bucket;
+  /** Uploads a workspace may reserve per day. Default 20. */
+  FREE_DAILY_UPLOADS?: string;
   /** Videos a workspace may start per day. Default 5. */
   FREE_DAILY_VIDEOS?: string;
   /** Research calls a workspace may make per day on the keys above. Its own keys (connect_keys) are not counted. Default 20. */

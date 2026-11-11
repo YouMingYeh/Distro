@@ -6,6 +6,10 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "routes": [{ "pattern": "mcp.trydistro.app", "custom_domain": true }],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "20d13cc195d44367af6908ed784ae6e6" }],
+  // Files users upload (create_upload, GET and PUT /files/<name>). The bucket has a lifecycle rule that
+  //   deletes objects after a day: `wrangler r2 bucket lifecycle add distro-uploads expire-1d --expire-days 1`.
+  //   Each workspace may reserve FREE_DAILY_UPLOADS uploads a day (default 20).
+  "r2_buckets": [{ "binding": "UPLOADS", "bucket_name": "distro-uploads" }],
   // Production values. Local dev (`pnpm dev`) reads .env.development instead:
   //   ORIGIN=http://localhost:8787
   //   WEB_ORIGIN=http://localhost:3000

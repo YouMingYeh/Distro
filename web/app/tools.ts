@@ -152,6 +152,26 @@ export const GROUPS: Group[] = [
 }`,
       },
       {
+        name: "create_upload",
+        summary: "A one-time link for uploading a file from your machine.",
+        detail:
+          "A tool call cannot carry a file, so this reserves a link instead. PUT the file to upload_url within 15 minutes; curl is the whole command, and the limit is 100 MB. The same link then serves the file for 24 hours, after which it is deleted. Anyone with the link can read the file. Pass it to generate_video as video, reference_videos, first_frame or audio_url, or to publish as video_url. Each workspace can reserve 20 uploads a day.",
+        params: [
+          ["content_type", "enum", "video/mp4", "video/mp4, video/quicktime, video/webm, image/png, image/jpeg, image/webp, audio/mpeg or audio/wav."],
+        ],
+        returns: `{
+  "upload_url": "https://mcp.trydistro.app/files/up_3f9c1e0a7b2d4c5e8f6a1b0c9d8e7f6a.mp4",
+  "method": "PUT",
+  "content_type": "video/mp4",
+  "curl": "curl -T <path-to-file> -H 'Content-Type: video/mp4' https://mcp.trydistro.app/files/up_3f9c1e0a7b2d4c5e8f6a1b0c9d8e7f6a.mp4",
+  "max_mb": 100,
+  "upload_within_s": 900,
+  "url": "https://mcp.trydistro.app/files/up_3f9c1e0a7b2d4c5e8f6a1b0c9d8e7f6a.mp4",
+  "note": "After the upload, \`url\` is public for 24 hours, then the file is deleted.",
+  "uploads_left_today": 19
+}`,
+      },
+      {
         name: "generate_video",
         summary: "Starts a render from a model id and a prompt.",
         detail:
@@ -165,6 +185,9 @@ export const GROUPS: Group[] = [
           ["negative_prompt", "string", "", "What to avoid, where the model supports it."],
           ["first_frame", "URL", "", "Public image URL to start from (image-to-video)."],
           ["audio_url", "URL", "", "Public wav or mp3 that drives lip sync. Wan models only."],
+          ["video", "URL", "", "Public URL of a source video to edit or extend: a video_url from get_job or a url from create_upload. Models without a source-video input use it as a reference video."],
+          ["video_task", "enum", "", "edit or extend. With video on gemini-omni models: edit the clip (the default) or continue it."],
+          ["reference_videos", "URL[]", "", "Up to 5 public video URLs that guide motion, style or character, on models that take them."],
           ["dry_run", "boolean", "false", "Return the price estimate without starting anything."],
         ],
         returns: `{
