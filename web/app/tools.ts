@@ -81,7 +81,10 @@ export const GROUPS: Group[] = [
       "accounts": [{ "account_id": "665f...", "platform": "tiktok", "username": "yourbrand", "active": true }]
     }
   ],
-  "services": [{ "name": "darkugc", "connected": false, "connect_with": "connect_darkugc" }],
+  "services": [
+    { "name": "darkugc", "connected": false, "connect_with": "connect_darkugc" },
+    { "name": "tokportal", "connected": false, "connect_with": "connect_tokportal" }
+  ],
   "api_keys": [{ "service": "firecrawl", "yours": false, "distro": true }]
 }`,
       },
@@ -462,6 +465,47 @@ export const GROUPS: Group[] = [
           ["to_date", "YYYY-MM-DD", "", "End of the date range."],
         ],
         returns: `// Zernio's analytics for the ad, passed through: totals plus a daily timeline.`,
+      },
+    ],
+  },
+  {
+    group: "Managed accounts",
+    scope: "managed",
+    intro:
+      "Extra posting accounts without opening them yourself. TokPortal creates TikTok and Instagram accounts on real phones in the country you pick, keeps running them and posts through them, paid in TokPortal credits. These accounts are apart from the ones you link with connect_account: publish does not post to them, TokPortal's own tools do. TikTok and Instagram can ban accounts they judge inauthentic.",
+    tools: [
+      {
+        name: "connect_tokportal",
+        summary: "Returns a sign-in link for the user's own TokPortal account.",
+        detail: "Needed once before the two tools below. Signing in makes a TokPortal API key for this workspace, which you can revoke in TokPortal's developer portal.",
+        params: [],
+        returns: `{ "auth_url": "https://app.tokportal.com/oauth/authorize?response_type=code&..." }`,
+      },
+      {
+        name: "tokportal_list_tools",
+        summary: "The TokPortal tools: credit balance, countries, account orders, video scheduling, analytics, bans.",
+        detail: "Without tool it returns every name with a one-line summary. With tool it returns that tool's full description and argument schema. Read it before tokportal_call.",
+        params: [["tool", "string", "", "A tool name, to get its full schema."]],
+        returns: `{
+  "tools": [
+    { "name": "tokportal_get_credit_balance", "summary": "...", "read_only": true },
+    { "name": "tokportal_create_bundle", "summary": "...", "read_only": false }
+  ]
+}`,
+      },
+      {
+        name: "tokportal_call",
+        summary: "Orders an account, schedules its videos or reads its results on TokPortal. Dry-run unless told otherwise.",
+        detail:
+          "Tools named tokportal_get_, tokportal_list_ or tokportal_export_ only read and run as they are. Every other tool spends TokPortal credits or changes a live account, with no cancellation and no refund. With dry_run true TokPortal validates the call and returns credits_would_charge without creating or charging anything. Ids from a dry run work only in other dry runs.",
+        params: [
+          ["tool", "string", "required", "A tool name from tokportal_list_tools."],
+          ["arguments", "object", "{}", "Arguments for that tool, as its schema describes."],
+          ["dry_run", "boolean", "true", "Set false to spend credits. Ignored by tools that only read."],
+        ],
+        returns: `// A tool that only reads: whatever TokPortal returns.
+// Any other tool:
+{ "dry_run": true, "result": { "credits_would_charge": 32, "...": "..." } }`,
       },
     ],
   },

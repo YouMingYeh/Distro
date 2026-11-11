@@ -26,7 +26,7 @@ export interface Env {
   JINA_API_KEY?: string;
   TAVILY_API_KEY?: string;
   EXA_API_KEY?: string;
-  /** Secret: encrypts what users store here (their scraper keys, their DarkUGC tokens). Random, e.g. `openssl rand -base64 32`.
+  /** Secret: encrypts what users store here (their scraper keys, their DarkUGC and TokPortal tokens). Random, e.g. `openssl rand -base64 32`.
    *  Unset means nothing can be saved. Changing it makes everything saved so far unreadable. */
   KEYS_ENCRYPTION_KEY?: string;
   /** The video model server (docs/MODEL_SERVER.md): its base URL (a var) and bearer token (a secret).
@@ -51,6 +51,7 @@ export const SCOPES = {
   research: "Search public videos and read public web pages",
   publish: "Create posts on connected accounts",
   ads: "Connect ad accounts, create and pause paid ads, and read their results",
+  managed: "Order managed accounts from TokPortal and post through them, on your TokPortal credits",
 } as const;
 export type Scope = keyof typeof SCOPES;
 

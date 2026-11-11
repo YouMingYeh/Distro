@@ -2,7 +2,7 @@ import { AuthorizationError, CimdFetchError, type ConsentDescription } from "@cl
 import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
 import { listApiKeys } from "./apikeys";
 import { readProfiles, useProfile } from "./profiles";
-import { darkugcCallback } from "./darkugc";
+import { remoteCallback, SERVICES, type Service } from "./remote";
 import { videoFile } from "./inference";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
 import { KEY_SERVICES } from "./scrapers";
@@ -13,7 +13,7 @@ const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 // A workspace belongs to a signed-in user. Sign-in is Clerk (the "Distro Worker" OAuth app),
 // which is where the Google button lives. KV maps user:<clerk user id> to the workspace id, and
 // the cookie holds a random session id that KV maps to that workspace. Social accounts, profiles
-// and DarkUGC tokens all hang off the workspace id, so they follow the user to any browser.
+// and outside-service tokens all hang off the workspace id, so they follow the user to any browser.
 // Without CLERK_ISSUER (self-host without Clerk) there is no sign-in and the cookie value itself
 // is the workspace.
 const COOKIE = "__Host-distro-ws";
@@ -295,17 +295,17 @@ function adsReturn(url: URL): Response {
   return new Response(page("Ads", body), { status: error ? 400 : 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-/** DarkUGC returns the browser here after its own sign-in and consent. */
-async function darkugcReturn(url: URL): Promise<Response> {
-  let body = "<h1>DarkUGC connected</h1><p>You can close this tab and go back to your agent.</p>";
+/** An outside service (DarkUGC, TokPortal) returns the browser here after its own sign-in and consent. */
+async function serviceReturn(s: Service, url: URL): Promise<Response> {
+  let body = `<h1>${s.label} connected</h1><p>You can close this tab and go back to your agent.</p>`;
   let status = 200;
   try {
-    await darkugcCallback(url);
+    await remoteCallback(s, url);
   } catch (e) {
     status = 400;
-    body = `<h1>DarkUGC was not connected</h1><p>${esc(e instanceof Error ? e.message : "Sign-in failed.")}</p>`;
+    body = `<h1>${s.label} was not connected</h1><p>${esc(e instanceof Error ? e.message : "Sign-in failed.")}</p>`;
   }
-  return new Response(page("DarkUGC", body), { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  return new Response(page(s.label, body), { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
 /** The form behind connect_keys. The one-time token in the link names the workspace, so it works in any browser. */
@@ -353,7 +353,8 @@ export const authHandler = {
     if (url.pathname === "/me" && req.method === "GET") return me(req);
     if (url.pathname === "/me/posts" && req.method === "GET") return mePosts(req, url);
     if (url.pathname === "/connect/callback") return connectCallback(url);
-    if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
+    const service = SERVICES.find((s) => url.pathname === `/${s.id}/callback`);
+    if (service) return serviceReturn(service, url);
     if (url.pathname === "/ads/callback") return adsReturn(url);
     if (url.pathname === "/keys") return keysPage(req, url);
     const platform = url.pathname.match(/^\/connect\/([a-z]+)$/)?.[1];

@@ -7,7 +7,7 @@
     "deploy": "wrangler deploy",
     "secrets": "wrangler secret bulk .env.production",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/scrapers.test.mjs"
+    "test": "node --test scripts/*.test.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^1.2.4",
