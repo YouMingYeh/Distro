@@ -3,6 +3,7 @@ import { Check } from "@phosphor-icons/react/dist/ssr";
 import { siModelcontextprotocol } from "simple-icons";
 import { TypedTask } from "./typed-task";
 import { DistroMascot } from "./distro-mascot";
+import "./agent-demo.css";
 
 const orbit = [
   { file: "claude.jpg" },
