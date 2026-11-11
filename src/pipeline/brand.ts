@@ -85,13 +85,52 @@ function meta(html: string, name: string): string | null {
   return content ? decodeEntities(content).trim() : null;
 }
 
+/** True for hosts that must never be fetched server-side (loopback, private, link-local, internal names). */
 function isPrivateHost(host: string): boolean {
-  const h = host.toLowerCase();
-  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return true;
-  if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  if (h.startsWith("[") || h === "::1") return true;
+  const h = host.toLowerCase().replace(/\.+$/, "");
+  if (!h || h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".lan") || h.endsWith(".home.arpa")) return true;
+  // Any IPv6 literal is refused: a public product site is reached by name.
+  if (h.startsWith("[") || h.includes(":")) return true;
+  // Single-label names resolve inside private networks.
+  if (!h.includes(".")) return true;
+  // Dotted-decimal, plus the integer / hex / octal spellings of an IPv4 address.
+  if (/^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+)){0,3}$/.test(h)) {
+    const parts = h.split(".").map((p) => (p.startsWith("0x") ? parseInt(p, 16) : p.length > 1 && p.startsWith("0") ? parseInt(p, 8) : Number(p)));
+    if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+  }
   return false;
+}
+
+const MAX_REDIRECTS = 4;
+
+/** Fetch with redirects followed by hand so every hop is re-validated. */
+async function safeFetch(start: URL, deadline: number): Promise<Response | { blocked: string }> {
+  let url = start;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!/^https?:$/.test(url.protocol) || isPrivateHost(url.hostname)) return { blocked: "URL is not a public http(s) address" };
+    if (url.username || url.password) return { blocked: "URLs with credentials are not allowed" };
+    const res = await fetch(url.toString(), {
+      redirect: "manual",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; DistroBot/0.1)", Accept: "text/html,application/xhtml+xml" },
+      signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
+    });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get("Location");
+    await res.body?.cancel().catch(() => {});
+    if (!location) return { blocked: `redirect (HTTP ${res.status}) without a Location` };
+    try {
+      url = new URL(location, url);
+    } catch {
+      return { blocked: "redirect to an invalid URL" };
+    }
+  }
+  return { blocked: "too many redirects" };
 }
 
 /** Fetch a site and reduce it to title, description and visible text. Never throws. */
@@ -102,15 +141,9 @@ export async function scrapeSite(siteUrl: string): Promise<{ ok: boolean; title:
   } catch {
     return { ok: false, title: null, excerpt: null, reason: "not a valid URL" };
   }
-  if (!/^https?:$/.test(url.protocol) || isPrivateHost(url.hostname)) {
-    return { ok: false, title: null, excerpt: null, reason: "URL is not a public http(s) address" };
-  }
   try {
-    const res = await fetch(url.toString(), {
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; DistroBot/0.1)", Accept: "text/html,application/xhtml+xml" },
-      signal: AbortSignal.timeout(8000),
-    });
+    const res = await safeFetch(url, Date.now() + 8000);
+    if ("blocked" in res) return { ok: false, title: null, excerpt: null, reason: res.blocked };
     if (!res.ok) return { ok: false, title: null, excerpt: null, reason: `site returned HTTP ${res.status}` };
     const type = res.headers.get("Content-Type") ?? "";
     if (type && !/html|text/i.test(type)) return { ok: false, title: null, excerpt: null, reason: `unexpected content type ${type}` };

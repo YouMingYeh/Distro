@@ -23,6 +23,11 @@ export async function publish(env: Env, baseUrl: string, input: PublishToolInput
   const adapterId = input.adapter ?? "dryrun";
   // Dry-run is the default. The built-in dryrun adapter can never post.
   const dryRun = adapterId === "dryrun" ? true : input.dry_run !== false;
+  // Live posting spends the host's scheduler account, and the MCP URL is open by
+  // default, so it needs an explicit server-side opt-in as well as dry_run: false.
+  if (!dryRun && env.ALLOW_LIVE_PUBLISH !== "1") {
+    throw new ToolError("Live posting is turned off on this server, so nothing was posted. Call publish with dry_run: true to get the draft. The server owner can enable live posts by setting ALLOW_LIVE_PUBLISH=1 (ideally together with DISTRO_BEARER_TOKEN).");
+  }
   if (input.schedule_at && Number.isNaN(Date.parse(input.schedule_at))) throw new ToolError("schedule_at must be an ISO-8601 date-time.");
 
   const brand = await getBrand(env);

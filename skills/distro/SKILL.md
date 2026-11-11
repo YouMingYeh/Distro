@@ -209,7 +209,8 @@ exact payload that would have been sent; nothing leaves the server. Adapters:
   posting. Route organic TikTok through Buffer or Zernio.
 
 Only set `dry_run: false` when the user explicitly asks for a live post and
-names the account. Generated videos carry a burned-in "AI-generated" label;
+names the account. Live posting is off on the server unless its owner enabled
+it; if the tool says so, give the user the dry-run draft instead. Generated videos carry a burned-in "AI-generated" label;
 keep the platform's AI-content disclosure switched on when posting.
 
 ## Rules

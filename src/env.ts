@@ -35,6 +35,8 @@ export interface Env {
   R2_SECRET_ACCESS_KEY?: string;
   R2_BUCKET_NAME?: string;
 
+  /** Must be "1" before publish will make a live (non dry-run) post. Off by default. */
+  ALLOW_LIVE_PUBLISH?: string;
   BUFFER_ACCESS_TOKEN?: string;
   ZERNIO_API_KEY?: string;
 

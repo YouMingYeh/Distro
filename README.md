@@ -136,9 +136,14 @@ npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
 npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
 
-# Live hook research (after signing in to DarkUGC, see section 11)
+# Live hook research. First run the one-time sign-in, which opens a browser and
+# writes the four values to .dev.vars:  node scripts/darkugc-oauth.ts
+# The access token lasts about an hour; the Worker refreshes it with the
+# refresh token, so all four are needed.
 npx wrangler secret put DARKUGC_ACCESS_TOKEN
 npx wrangler secret put DARKUGC_REFRESH_TOKEN
+npx wrangler secret put DARKUGC_TOKEN_ENDPOINT
+npx wrangler secret put DARKUGC_CLIENT_ID
 
 # Signed /files URLs, schedulers
 npx wrangler secret put FILES_SIGNING_SECRET
@@ -304,8 +309,11 @@ npx wrangler dev
 ```
 
 The MCP endpoint is `http://localhost:8787/mcp`. Local dev reads `.dev.vars`.
-In local dev the Worker can reach an ffmpeg service on `localhost`
-(`FFMPEG_SERVICE_URL=http://127.0.0.1:8788`); a deployed Worker cannot. You can
+In local dev the Worker can reach an ffmpeg service on `localhost`: put
+`FFMPEG_SERVICE_URL=http://127.0.0.1:8788` and `ALLOW_LOCAL_FFMPEG=1` in
+`.dev.vars`, and start the service with `--allow-private` so it may download
+from the local Worker. A deployed Worker cannot reach `localhost`, and
+`ALLOW_LOCAL_FFMPEG` must never be set in production. You can
 inspect the server with `npx @modelcontextprotocol/inspector`.
 
 ## 10. Optional bearer token
@@ -343,6 +351,9 @@ require short-lived signed URLs.
   `fixtures/hook-patterns-seed.json`, writes fresh lines from your brand
   profile, and says so in its `notes` field. The seed patterns are a fallback,
   not live trend data.
+- **Live posting is opt-in on the server.** Even with `dry_run: false`, `publish`
+  refuses to post unless `ALLOW_LIVE_PUBLISH=1` is set. The MCP URL is open by
+  default, so leave this off unless you also set `DISTRO_BEARER_TOKEN`.
 - **Dry-run publishing.** `publish` defaults to `dry_run: true`: it stores a
   draft and returns the payload that would have been sent, without calling any
   third party. Live posting is opt-in per call.

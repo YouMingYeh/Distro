@@ -74,21 +74,20 @@ export async function startVideo(env: Env, baseUrl: string, input: MakeVideoInpu
     throw new ToolError(`This render would cost $${usd(wanCents).toFixed(2)}, above the per-render limit of $${usd(cfg.maxRenderCents).toFixed(2)}. Use a shorter hook_duration_s or resolution=480P.`);
   }
 
-  // ---- Idempotency: same hook + footage + model + params returns the existing job.
+  // ---- Idempotency: same hook + footage + model + params maps to the same job id.
   const idemKey = await sha256Hex(JSON.stringify([hook.id, bodyAssets, MODELS.video, MODELS.tts, resolution, hookDuration]));
-  const prior = await env.DB.prepare(`SELECT * FROM jobs WHERE params_json LIKE ? AND status NOT IN ('failed','discarded') ORDER BY created_at DESC LIMIT 1`)
-    .bind(`%"idem_key":"${idemKey}"%`)
-    .first<JobRow>();
-  if (prior) {
-    return {
-      job_id: prior.id,
-      status: prior.status,
-      estimated_usd: usd(prior.estimated_cents ?? 0),
-      reserved_usd: usd(prior.reserved_cents ?? 0),
-      poll: "get_job",
-      note: "An identical job already exists; returning it instead of spending again.",
-    };
-  }
+  const baseId = `job_${idemKey.slice(0, 12)}`;
+  const priors = (await env.DB.prepare(`SELECT * FROM jobs WHERE id LIKE ? ORDER BY created_at DESC`).bind(`${baseId}%`).all<JobRow>()).results ?? [];
+  const existingView = (j: JobRow) => ({
+    job_id: j.id,
+    status: j.status,
+    estimated_usd: usd(j.estimated_cents ?? 0),
+    reserved_usd: usd(j.reserved_cents ?? 0),
+    poll: "get_job",
+    note: "An identical job already exists; returning it instead of spending again.",
+  });
+  const live = priors.find((j) => j.status !== "failed" && j.status !== "discarded");
+  if (live) return existingView(live);
 
   if (estCents >= cfg.confirmCents) {
     const ok = typeof input.confirm_usd === "number" && Math.abs(Math.round(input.confirm_usd * 100) - estCents) <= 1;
@@ -100,8 +99,9 @@ export async function startVideo(env: Env, baseUrl: string, input: MakeVideoInpu
     throw new ToolError(`${MAX_CONCURRENT_RENDERS} renders are already in progress. Wait for one to finish (poll get_job), then try again.`);
   }
 
-  const jobId = `job_${idemKey.slice(0, 10)}${crypto.randomUUID().slice(0, 4)}`;
-  await reserve(env, { cents: estCents, key: jobId, job_id: jobId, model: MODELS.video, note: `${wantHead ? `${hookDuration}s ${resolution} hook` : "text hook"} + voice + edit` });
+  // A retry after a failed or discarded attempt gets a new suffix.
+  const jobId = priors.length ? `${baseId}r${priors.length}` : baseId;
+  const reservation = await reserve(env, { cents: estCents, key: jobId, job_id: jobId, model: MODELS.video, note: `${wantHead ? `${hookDuration}s ${resolution} hook` : "text hook"} + voice + edit` });
 
   const params: JobParams = {
     hook_id: hook.id,
@@ -115,13 +115,18 @@ export async function startVideo(env: Env, baseUrl: string, input: MakeVideoInpu
   };
   const now = nowIso();
   try {
-    await env.DB.prepare(`INSERT INTO jobs (id,hook_id,status,step,params_json,estimated_cents,reserved_cents,created_at,updated_at) VALUES (?,?, 'queued', NULL, ?,?,?,?,?)`)
+    const ins = await env.DB.prepare(`INSERT OR IGNORE INTO jobs (id,hook_id,status,step,params_json,estimated_cents,reserved_cents,created_at,updated_at) VALUES (?,?, 'queued', NULL, ?,?,?,?,?)`)
       .bind(jobId, hook.id, JSON.stringify(params), estCents, estCents, now, now)
       .run();
+    if (!ins.meta.changes) {
+      // A concurrent identical call won the race; the reservation is shared (same key).
+      const winner = await getJob(env, jobId);
+      if (winner) return existingView(winner);
+    }
     await env.MAKE_VIDEO.create({ id: jobId, params: { job_id: jobId } });
   } catch (e) {
-    await release(env, jobId, { job_id: jobId, note: "job could not be started" });
-    await env.DB.prepare(`UPDATE jobs SET status='failed', error=? WHERE id=?`).bind("Could not start the pipeline.", jobId).run().catch(() => {});
+    if (!reservation.existing) await release(env, jobId, { job_id: jobId, note: "job could not be started" });
+    await env.DB.prepare(`UPDATE jobs SET status='failed', error=? WHERE id=? AND status='queued'`).bind("Could not start the pipeline.", jobId).run().catch(() => {});
     throw new ToolError(`Could not start the video pipeline (${String(e instanceof Error ? e.message : e).slice(0, 160)}). Nothing was charged.`);
   }
 
