@@ -4,56 +4,11 @@ import { Code, CodeTabs, CopyButton } from "./code-tabs";
 import { ConnectPanel } from "./connect-panel";
 import { SignInButton } from "./me";
 import { isPlatform } from "./platforms";
+import { GROUPS } from "./tools";
 
 const BASE = process.env.NEXT_PUBLIC_DISTRO_URL?.replace(/\/$/, "") || "https://mcp.trydistro.app";
 const REPO = "https://github.com/YouMingYeh/Distro";
 const INSTALL = `claude mcp add --transport http distro ${BASE}/mcp`;
-
-const TOOLS = [
-  {
-    group: "Accounts",
-    tools: [
-      ["connect_account", "Returns a consent link for a platform. The user approves and the account is linked."],
-      ["list_accounts", "Which accounts are linked, and whether each is still active."],
-    ],
-  },
-  {
-    group: "Video",
-    tools: [
-      ["list_models", "Every generation model the server can call."],
-      ["generate_video", "Starts a render from a model id and a prompt."],
-      ["get_job", "Job status, then the video URL once it is ready."],
-    ],
-  },
-  {
-    group: "Research",
-    tools: [
-      ["find_viral_videos", "The most-viewed recent TikToks, Reels or Shorts on a topic, merged from several scraper services."],
-      ["get_video_hook", "The spoken hook and full transcript of a TikTok video."],
-      ["scrape_page", "Any public page as markdown, through Firecrawl, Jina, Tavily or Exa."],
-      ["web_search", "Web results with titles, URLs and snippets."],
-      ["connect_keys", "Returns a link where the user adds their own scraper keys. Optional."],
-      ["connect_darkugc", "Returns a sign-in link for the user's own DarkUGC account."],
-      ["darkugc_call", "Top hooks, trends and niche breakdowns from the DarkUGC library."],
-    ],
-  },
-  {
-    group: "Ads",
-    tools: [
-      ["connect_ads", "Returns a link to grant access to an ad account on Meta, TikTok, Google and more."],
-      ["list_ad_accounts", "The ad accounts each connection can spend from."],
-      ["boost_post", "Turns a published post into a paid ad. Dry-run unless told otherwise."],
-      ["create_ad", "A new ad from a video or image. Dry-run unless told otherwise."],
-      ["list_ads", "Ads with status, budget and results."],
-      ["set_ad_status", "Pauses or resumes one ad."],
-      ["get_ad_analytics", "Spend, impressions and clicks for one ad, day by day."],
-    ],
-  },
-  {
-    group: "Publish",
-    tools: [["publish", "Posts a video to linked accounts, now or on a schedule. Dry-run unless told otherwise."]],
-  },
-];
 
 const FLOWS = [
   {
@@ -91,7 +46,7 @@ const SAMPLES = {
   "auth_url": "https://www.tiktok.com/v2/auth/authorize?client_key=..."
 }`,
     REST: `curl ${BASE}/api/tools/connect_account \\
-  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -H "Authorization: Bearer $DISTRO_API_KEY" \\
   -d '{ "platform": "tiktok" }'
 
 # 200
@@ -119,12 +74,12 @@ Agent   Open this link to approve access:
   "poll": "get_job"
 }`,
     REST: `curl ${BASE}/api/tools/generate_video \\
-  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -H "Authorization: Bearer $DISTRO_API_KEY" \\
   -d '{ "model": "<model id>", "prompt": "..." }'
 
 # then poll
 curl ${BASE}/api/tools/get_job \\
-  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -H "Authorization: Bearer $DISTRO_API_KEY" \\
   -d '{ "job_id": "job_..." }'`,
     Skill: `You     Make a short video for the launch.
 
@@ -149,7 +104,7 @@ Agent   Rendering now.
   "message": "Dry-run only; nothing was posted."
 }`,
     REST: `curl ${BASE}/api/tools/publish \\
-  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -H "Authorization: Bearer $DISTRO_API_KEY" \\
   -d '{
     "video_url": "https://...",
     "caption": "...",
@@ -184,7 +139,7 @@ Agent   Here is the dry run. Nothing was posted.
   "message": "Dry-run only; no ad was created and nothing will be spent."
 }`,
     REST: `curl ${BASE}/api/tools/boost_post \\
-  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -H "Authorization: Bearer $DISTRO_API_KEY" \\
   -d '{
     "post_id": "<post_id from publish>",
     "account_id": "<from list_ad_accounts>",
@@ -258,6 +213,9 @@ export default function Page({ searchParams }: PageProps<"/">) {
           <a href="#auth" className="hidden text-muted transition hover:text-fg md:block">
             Auth
           </a>
+          <a href="/docs" className="text-muted transition hover:text-fg">
+            Docs
+          </a>
           <span className="hidden sm:block">
             <a href="#install" className={primary}>
               Add to your agent
@@ -297,17 +255,24 @@ export default function Page({ searchParams }: PageProps<"/">) {
         <section id="tools" className={`${shell} scroll-mt-8 py-16 md:py-24`}>
           <h2 className={h2}>Tools your agent can call.</h2>
           <p className="mt-4 max-w-[60ch] text-muted">
-            Each tool does one job and returns structured JSON. Every call is scoped to the workspace that authorized it.
+            Each tool does one job and returns structured JSON. Every call is scoped to the workspace that authorized it.{" "}
+            <a href="/docs#tools" className="text-fg underline underline-offset-4">
+              Arguments and results are in the docs.
+            </a>
           </p>
           <div className="mt-12 grid gap-4 md:grid-cols-2">
-            {TOOLS.map(({ group, tools }, i) => (
+            {GROUPS.map(({ group, tools }, i) => (
               <div key={group} className={`rounded-xl p-6 ${i === 1 ? "bg-fg text-bg" : "border border-line bg-surface"}`}>
                 <h3 className="text-sm font-medium">{group}</h3>
                 <dl className={`mt-6 grid gap-6 ${i === 1 ? "sm:grid-cols-2" : ""}`}>
-                  {tools.map(([name, desc]) => (
+                  {tools.map(({ name, summary }) => (
                     <div key={name}>
-                      <dt className="font-mono text-sm">{name}</dt>
-                      <dd className={`mt-1.5 text-sm leading-relaxed ${i === 1 ? "opacity-70" : "text-muted"}`}>{desc}</dd>
+                      <dt className="font-mono text-sm">
+                        <a href={`/docs#${name}`} className="underline-offset-4 hover:underline">
+                          {name}
+                        </a>
+                      </dt>
+                      <dd className={`mt-1.5 text-sm leading-relaxed ${i === 1 ? "opacity-70" : "text-muted"}`}>{summary}</dd>
                     </div>
                   ))}
                 </dl>
@@ -377,6 +342,9 @@ export default function Page({ searchParams }: PageProps<"/">) {
       <footer className={`${shell} flex flex-col gap-2 py-8 text-sm text-muted md:flex-row md:justify-between`}>
         <p>Distro. Publishing runs on Zernio.</p>
         <span className="flex gap-5">
+          <a href="/docs" className="transition hover:text-fg">
+            Docs
+          </a>
           <a href="/privacy" className="transition hover:text-fg">
             Privacy
           </a>
