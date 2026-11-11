@@ -1,0 +1,9 @@
+{
+  "name": "distro",
+  "displayName": "Distro",
+  "version": "0.1.0",
+  "description": "Replace your GTM team: research hooks, make short-form videos from footage you drop in chat, sanity-check them, and hand them to your scheduler.",
+  "author": { "name": "Distro" },
+  "license": "MIT",
+  "keywords": ["gtm", "tiktok", "ugc", "mcp"]
+}

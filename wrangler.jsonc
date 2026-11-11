@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "distro",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "GUARDRAILS", "class_name": "GuardrailsDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GuardrailsDO"] }],
+  "workflows": [
+    { "name": "make-video", "binding": "MAKE_VIDEO", "class_name": "MakeVideoWorkflow" }
+  ],
+  // Replace database_id with the id printed by `npx wrangler d1 create distro`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "distro",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "distro" }],
+  // Non-secret tunables. Secrets (GMI_API_KEY, FFMPEG_SERVICE_URL, ...) go in
+  // `wrangler secret put` or .dev.vars. See .env.example.
+  "vars": {
+    "SPEND_CAP_USD": "9",
+    "MAX_RENDER_USD": "1",
+    "DARKUGC_DAILY_CALL_CAP": "30",
+    "CONFIRM_USD_THRESHOLD": "0.50",
+    "UPLOAD_MAX_WORKER_BYTES": "83886080",
+    "UPLOAD_MAX_PRESIGN_BYTES": "536870912",
+    "DARKUGC_MCP_URL": "https://darkugc.com/mcp",
+    "R2_BUCKET_NAME": "distro"
+  }
+}
