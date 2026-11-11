@@ -78,4 +78,18 @@ rest rename_profile "{\"profile\":\"$PID\",\"name\":\"Acme Co\"}" | grep -q '"na
 rest list_accounts '{"profile":"nope"}' | grep -q 'No profile' || fail "unknown profile accepted"
 rest delete_profile '{"profile":"acme co"}' | grep -q "\"deleted\":\"$PID\"" || fail "delete_profile by name"
 rest delete_profile '{"profile":"Default"}' | grep -q 'only profile' || fail "deleted the only profile"
-echo "ok: OAuth (DCR + PKCE + consent), MCP, REST, scope, input and profile checks"
+# API keys: made from the OAuth session, inherit its scopes (accounts only), and cannot manage keys.
+keys() { curl -s -X "$1" "$BASE/api/api-keys$2" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"}; }
+MADE=$(keys POST "" '{"name":"smoke"}')
+KEY=$(printf '%s' "$MADE" | json "['key']"); KID=$(printf '%s' "$MADE" | json "['id']")
+keys GET "" | grep -q "\"id\":\"$KID\"" || fail "api key not listed"
+keys GET "" | grep -q "$KEY" && fail "api key listed in full"
+OAUTH=$TOKEN; TOKEN=$KEY
+rest list_profiles '{}' | grep -q '"name":"Default"' || fail "api key not accepted"
+rest list_models '{}' | grep -q 'lacks the' || fail "api key scope not enforced"
+curl -s "$BASE/api/me" -H "Authorization: Bearer $KEY" | grep -q '"auth":"api_key"' || fail "/api/me with key"
+keys GET "" | grep -q 'forbidden' || fail "api key could manage keys"
+TOKEN=$OAUTH
+keys DELETE "?id=$KID" | grep -q "\"revoked\":\"$KID\"" || fail "revoke api key"
+curl -s -o /dev/null -w '%{http_code}' "$BASE/api/me" -H "Authorization: Bearer $KEY" | grep -q 401 || fail "revoked api key still accepted"
+echo "ok: OAuth (DCR + PKCE + consent), MCP, REST, scope, input, profile and API key checks"

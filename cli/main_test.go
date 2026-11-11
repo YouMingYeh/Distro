@@ -9,3 +9,16 @@ func TestChallenge(t *testing.T) {
 		t.Fatalf("challenge = %q, want %q", got, want)
 	}
 }
+
+// DISTRO_API_KEY is used as the bearer without touching the saved session.
+func TestSessionFromEnvKey(t *testing.T) {
+	t.Setenv("DISTRO_API_KEY", " dk_test ")
+	t.Setenv("DISTRO_URL", "http://localhost:1/")
+	c, err := session()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.AccessToken != "dk_test" || c.Base != "http://localhost:1" {
+		t.Fatalf("session = %+v", c)
+	}
+}

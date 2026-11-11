@@ -36,6 +36,7 @@ type creds struct {
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	Scope        string    `json:"scope,omitempty"`
 	Expiry       time.Time `json:"expiry"`
+	APIKey       string    `json:"api_key,omitempty"` // set instead of the OAuth fields by `login --with-key`
 }
 
 type tokenResponse struct {
@@ -254,11 +255,44 @@ func login() error {
 	return nil
 }
 
+// loginWithKey saves an API key read from stdin, after checking the server accepts it.
+// Stdin, not an argument, so the key stays out of shell history and the process list.
+func loginWithKey() error {
+	b, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+	if err != nil {
+		return err
+	}
+	c := &creds{Base: baseURL(), APIKey: strings.TrimSpace(string(b))}
+	if c.APIKey == "" {
+		return errors.New("no key on stdin. Usage: distro login --with-key < key.txt")
+	}
+	c.AccessToken = c.APIKey
+	if status, _, err := send(c, "GET", "/api/me", ""); err != nil {
+		return err
+	} else if status != http.StatusOK {
+		return fmt.Errorf("%s did not accept that key (HTTP %d)", c.Base, status)
+	}
+	c.AccessToken = "" // the key is the credential; session() fills this in
+	if err := save(c); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Signed in to %s with an API key\n", c.Base)
+	return nil
+}
+
 // session returns valid credentials, refreshing the access token when it is about to expire.
+// An API key never expires: DISTRO_API_KEY wins over anything saved by `distro login`.
 func session() (*creds, error) {
+	if k := strings.TrimSpace(os.Getenv("DISTRO_API_KEY")); k != "" {
+		return &creds{Base: baseURL(), APIKey: k, AccessToken: k}, nil
+	}
 	c, err := load()
 	if err != nil {
 		return nil, err
+	}
+	if c.APIKey != "" {
+		c.AccessToken = c.APIKey
+		return c, nil
 	}
 	if time.Until(c.Expiry) > time.Minute {
 		return c, nil
@@ -279,11 +313,19 @@ func session() (*creds, error) {
 }
 
 func call(tool, args string) (int, []byte, error) {
+	return request("POST", "/api/tools/"+url.PathEscape(tool), args)
+}
+
+func request(method, path, body string) (int, []byte, error) {
 	c, err := session()
 	if err != nil {
 		return 0, nil, err
 	}
-	req, _ := http.NewRequestWithContext(context.Background(), "POST", c.Base+"/api/tools/"+url.PathEscape(tool), strings.NewReader(args))
+	return send(c, method, path, body)
+}
+
+func send(c *creds, method, path, body string) (int, []byte, error) {
+	req, _ := http.NewRequestWithContext(context.Background(), method, c.Base+path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+c.AccessToken)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := httpc.Do(req)
@@ -300,7 +342,8 @@ func logout() error {
 	if err != nil {
 		return err
 	}
-	// Best effort: revoke server-side, then always forget locally.
+	// Best effort: revoke server-side, then always forget locally. A saved API key is only
+	// forgotten: it may be in use elsewhere. Revoke it with `distro apikey revoke`.
 	for _, tok := range []string{c.RefreshToken, c.AccessToken} {
 		if tok != "" {
 			if res, err := httpc.PostForm(c.Base+"/oauth/token", url.Values{"token": {tok}, "client_id": {c.ClientID}}); err == nil {
@@ -320,13 +363,18 @@ const usage = `distro: social tools for agents, from your terminal
 
 Usage:
   distro login                 Sign in through your browser
+  distro login --with-key      Sign in with an API key read from stdin
   distro logout                Revoke and forget the saved session
   distro status                Show whether you are signed in
   distro token                 Print a valid access token (for curl and scripts)
   distro call <tool> [json]    Call a tool, e.g. distro call list_models '{}'
+  distro apikey create [name]  Make an API key (shown once). Needs a browser sign-in
+  distro apikey list
+  distro apikey revoke <id>
   distro version
 
 Environment:
+  DISTRO_API_KEY  API key to use instead of the saved session (CI, servers)
   DISTRO_URL   Server to use (default https://mcp.trydistro.app)
 `
 
@@ -337,13 +385,22 @@ func run(args []string) error {
 	}
 	switch args[0] {
 	case "login":
+		if len(args) > 1 && args[1] == "--with-key" {
+			return loginWithKey()
+		}
 		return login()
+	case "apikey":
+		return apikey(args[1:])
 	case "logout":
 		return logout()
 	case "status":
 		c, err := session()
 		if err != nil {
 			return err
+		}
+		if c.APIKey != "" {
+			fmt.Printf("Signed in to %s with an API key\n", c.Base)
+			return nil
 		}
 		fmt.Printf("Signed in to %s\nScopes: %s\nAccess token valid until %s\n", c.Base, c.Scope, c.Expiry.Local().Format(time.RFC1123))
 		return nil
@@ -382,6 +439,31 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %q. Run: distro help", args[0])
+}
+
+func apikey(args []string) error {
+	var status int
+	var out []byte
+	var err error
+	switch {
+	case len(args) >= 1 && args[0] == "create":
+		body, _ := json.Marshal(map[string]string{"name": strings.Join(args[1:], " ")})
+		status, out, err = request("POST", "/api/api-keys", string(body))
+	case len(args) == 1 && args[0] == "list":
+		status, out, err = request("GET", "/api/api-keys", "")
+	case len(args) == 2 && args[0] == "revoke":
+		status, out, err = request("DELETE", "/api/api-keys?id="+url.QueryEscape(args[1]), "")
+	default:
+		return errors.New("usage: distro apikey create [name] | list | revoke <id>")
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Println(strings.TrimSpace(string(out)))
+	if status >= 400 {
+		return fmt.Errorf("HTTP %d", status)
+	}
+	return nil
 }
 
 func main() {
