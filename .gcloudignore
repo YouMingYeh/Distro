@@ -1,0 +1,15 @@
+# Allowlist: upload ONLY what the model server image needs.
+# Never upload .env, .dev.vars, model_server/data/ or anything else.
+*
+!model_server/
+!model_server/app.py
+!model_server/gmi_video.py
+!model_server/requirements.txt
+!model_server/Dockerfile
+!model_server/cloudbuild.yaml
+!src/
+!src/data/
+!src/data/gmi-video-models.json
+model_server/data/
+model_server/README.md
+**/.DS_Store

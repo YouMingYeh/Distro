@@ -1,0 +1,5 @@
+# gcloud builds submit --config model_server/cloudbuild.yaml --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/distro/model-server .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "model_server/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]

@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27", "pydantic>=2"]
+# dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27", "pydantic>=2", "google-cloud-storage>=2.18"]
 # ///
 """Distro video model server: one HTTP endpoint in front of every GMI Cloud video model.
 
@@ -12,20 +12,23 @@
     GET  /spend               spend cap, reserved, committed
     GET  /health
 
-Run:
+Run locally:
     uv run model_server/app.py                 # http://localhost:8787, GMI_API_KEY from env or .env
 
 Env (all optional except GMI_API_KEY):
     GMI_API_KEY, GMI_ORG_ID
-    SPEND_CAP_USD=9          global cap across all jobs, persisted in model_server/data/spend.json
+    SPEND_CAP_USD=9          global cap across all jobs, persisted in the ledger
     MAX_RENDER_USD=1.00      one job may not reserve more than this
-    MODEL_SERVER_TOKEN       if set, require `Authorization: Bearer <token>`
-    PUBLIC_BASE_URL          base for video_url (e.g. your cloudflared tunnel); default: request host
+    MODEL_SERVER_TOKEN       require `Authorization: Bearer <token>`; mandatory on Cloud Run
+    GCS_BUCKET               store videos, jobs and the ledger in this bucket instead of model_server/data
+    PUBLIC_BASE_URL          base for video_url; default: request host
     PORT=8787, HOST=0.0.0.0
 
 Costs are LIST-PRICE estimates reserved before submit. GMI keeps generating at a
 negative balance, so this cap is the real limiter. Failed GMI jobs are refunded
 by GMI, so their reserve is released; timeouts stay reserved (they may still bill).
+Jobs are saved on every status change; after a restart, jobs that GMI accepted
+resume polling.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ import json
 import os
 import secrets
 import sys
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,7 +46,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 HERE = Path(__file__).resolve().parent
@@ -51,9 +55,6 @@ sys.path.insert(0, str(HERE))
 from gmi_video import VideoRequest, build, load_catalog  # noqa: E402
 
 QUEUE_URL = "https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests"
-DATA = HERE / "data"
-VIDEOS = DATA / "videos"
-LEDGER = DATA / "spend.json"
 POLL_S = 5.0
 JOB_TIMEOUT_S = 900.0
 
@@ -73,22 +74,91 @@ SPEND_CAP = float(env("SPEND_CAP_USD", "9"))
 MAX_RENDER = float(env("MAX_RENDER_USD", "1.00"))
 TOKEN = env("MODEL_SERVER_TOKEN")
 PUBLIC_BASE = (env("PUBLIC_BASE_URL") or "").rstrip("/")
+GCS_BUCKET = env("GCS_BUCKET")
+ON_CLOUD_RUN = bool(os.environ.get("K_SERVICE"))
+
+
+# ---------------------------------------------------------------- storage
+class Store:
+    """Small key/value + file store: local folder, or a GCS bucket when GCS_BUCKET is set."""
+
+    def __init__(self, bucket: str | None):
+        self.local = HERE / "data"
+        self.bucket = None
+        if bucket:
+            from google.cloud import storage  # imported only when used
+
+            self.bucket = storage.Client().bucket(bucket)
+        else:
+            self.local.mkdir(parents=True, exist_ok=True)
+
+    async def read_json(self, key: str) -> Any:
+        def go() -> Any:
+            if self.bucket:
+                blob = self.bucket.blob(key)
+                return json.loads(blob.download_as_bytes()) if blob.exists() else None
+            p = self.local / key
+            return json.loads(p.read_text()) if p.exists() else None
+        return await asyncio.to_thread(go)
+
+    async def write_json(self, key: str, obj: Any) -> None:
+        data = json.dumps(obj, indent=1)
+
+        def go() -> None:
+            if self.bucket:
+                self.bucket.blob(key).upload_from_string(data, content_type="application/json")
+            else:
+                p = self.local / key
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(data)
+        await asyncio.to_thread(go)
+
+    async def list_json(self, prefix: str) -> list[Any]:
+        def go() -> list[Any]:
+            if self.bucket:
+                return [json.loads(b.download_as_bytes()) for b in self.bucket.list_blobs(prefix=prefix)
+                        if b.name.endswith(".json")]
+            d = self.local / prefix
+            return [json.loads(p.read_text()) for p in d.glob("*.json")] if d.exists() else []
+        return await asyncio.to_thread(go)
+
+    def temp_path(self, key: str) -> Path:
+        if self.bucket:
+            return Path(tempfile.gettempdir()) / key.replace("/", "_")
+        p = self.local / key
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    async def put_file(self, path: Path, key: str, content_type: str) -> None:
+        if not self.bucket:
+            return  # temp_path already is the final local path
+        await asyncio.to_thread(self.bucket.blob(key).upload_from_filename, str(path), content_type=content_type)
+        path.unlink(missing_ok=True)
+
+    async def get_file(self, key: str) -> bytes | Path | None:
+        if self.bucket:
+            def go() -> bytes | None:
+                blob = self.bucket.blob(key)
+                return blob.download_as_bytes() if blob.exists() else None
+            return await asyncio.to_thread(go)
+        p = self.local / key
+        return p if p.exists() else None
 
 
 # ---------------------------------------------------------------- spend ledger
 class Ledger:
-    """Reserve -> commit/release, persisted so the cap survives restarts."""
+    """Reserve -> commit/release, persisted so the cap survives restarts. Run one instance only."""
 
-    def __init__(self, path: Path, cap: float):
-        self.path, self.cap = path, cap
+    KEY = "spend.json"
+
+    def __init__(self, store: Store, cap: float):
+        self.store, self.cap = store, cap
         self.lock = asyncio.Lock()
-        self.state = {"committed": 0.0, "reserved": {}, "entries": []}
-        if path.exists():
-            self.state = json.loads(path.read_text())
+        self.state: dict[str, Any] = {"committed": 0.0, "reserved": {}, "entries": []}
 
-    def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.state, indent=1))
+    async def load(self) -> None:
+        if saved := await self.store.read_json(self.KEY):
+            self.state = saved
 
     @property
     def reserved(self) -> float:
@@ -111,15 +181,17 @@ class Ledger:
                                          f"(committed ${self.state['committed']:.2f}, reserved ${self.reserved:.2f})")
             self.state["reserved"][job] = usd
             self._log("reserve", job, usd, note)
-            self._save()
+            await self.store.write_json(self.KEY, self.state)
 
     async def settle(self, job: str, commit: bool, note: str = "") -> None:
         async with self.lock:
-            usd = self.state["reserved"].pop(job, 0.0)
+            if job not in self.state["reserved"]:
+                return
+            usd = self.state["reserved"].pop(job)
             if commit:
                 self.state["committed"] += usd
             self._log("commit" if commit else "release", job, usd, note)
-            self._save()
+            await self.store.write_json(self.KEY, self.state)
 
 
 # ---------------------------------------------------------------- jobs
@@ -139,6 +211,7 @@ class GenerateBody(BaseModel):
 
 
 Status = Literal["queued", "submitted", "processing", "downloading", "ready", "failed", "timeout"]
+TERMINAL = {"ready", "failed", "timeout"}
 
 
 class Job(BaseModel):
@@ -198,31 +271,44 @@ def resolve_model(sel: str) -> dict[str, Any]:
     return e
 
 
+async def save_job(job: Job) -> None:
+    await STATE["store"].write_json(f"jobs/{job.job_id}.json", job.model_dump())
+
+
+async def finish(job: Job, status: Status, commit: bool | None, error: str | None = None) -> None:
+    job.status, job.error = status, error
+    job.finished_at = time.time()
+    job.elapsed_s = round(job.finished_at - job.created_at, 1)
+    if commit is not None:
+        await STATE["ledger"].settle(job.job_id, commit, error or status)
+    await save_job(job)
+    if ev := DONE.get(job.job_id):
+        ev.set()
+
+
 async def run_job(job: Job) -> None:
+    """Submit to GMI, then poll and store the result."""
     client: httpx.AsyncClient = STATE["gmi"]
-    ledger: Ledger = STATE["ledger"]
-    settled = False
-
-    async def finish(status: Status, commit: bool | None, error: str | None = None) -> None:
-        nonlocal settled
-        job.status, job.error = status, error
-        job.finished_at = time.time()
-        job.elapsed_s = round(job.finished_at - job.created_at, 1)
-        if commit is not None and not settled:
-            await ledger.settle(job.job_id, commit, error or status)
-            settled = True
-        DONE[job.job_id].set()
-
     try:
         r = await client.post(QUEUE_URL, json={"model": job.model, "payload": job.payload})
         body = r.json() if r.content else {}
         if r.status_code >= 400:
-            return await finish("failed", False, f"GMI submit HTTP {r.status_code}: {pick(body, 'error', 'message') or body}")
+            return await finish(job, "failed", False, f"GMI submit HTTP {r.status_code}: {pick(body, 'error', 'message') or body}")
         job.gmi_request_id = pick(body, "request_id", "id", "data.request_id", "data.id")
         if not job.gmi_request_id:
-            return await finish("failed", False, f"GMI submit returned no request_id: {str(body)[:300]}")
+            return await finish(job, "failed", False, f"GMI submit returned no request_id: {str(body)[:300]}")
         job.status = "submitted"
+        await save_job(job)
+    except Exception as e:  # noqa: BLE001
+        # Unknown whether GMI accepted it; keep the reserve rather than under-count.
+        return await finish(job, "failed", None, f"submit {type(e).__name__}: {e}")
+    await poll_job(job)
 
+
+async def poll_job(job: Job) -> None:
+    client: httpx.AsyncClient = STATE["gmi"]
+    store: Store = STATE["store"]
+    try:
         while time.time() - job.created_at < JOB_TIMEOUT_S:
             await asyncio.sleep(POLL_S)
             try:
@@ -233,41 +319,62 @@ async def run_job(job: Job) -> None:
                 continue
             pb = pr.json()
             st = str(pick(pb, "status", "data.status") or "unknown").lower()
+            changed = st != job.gmi_status
             job.gmi_status = st
-            if st in ("processing", "dispatched", "running"):
+            if st in ("processing", "dispatched", "running") and job.status != "processing":
                 job.status = "processing"
             if st == "success":
                 job.gmi_video_url = pick(pb, "outcome.media_urls.0.url", "outcome.video_url",
                                          "data.outcome.media_urls.0.url", "data.outcome.video_url")
                 break
             if st in ("failed", "cancelled", "canceled", "error"):
-                return await finish("failed", False, f"GMI {st}: {str(pick(pb, 'error', 'message', 'outcome') or '')[:300]}")
+                return await finish(job, "failed", False, f"GMI {st}: {str(pick(pb, 'error', 'message', 'outcome') or '')[:300]}")
+            if changed:
+                await save_job(job)
         else:
-            return await finish("timeout", None, f"no result after {JOB_TIMEOUT_S:.0f}s; reserve kept (may bill)")
+            return await finish(job, "timeout", None, f"no result after {JOB_TIMEOUT_S:.0f}s; reserve kept (may bill)")
 
         if not job.gmi_video_url:
-            return await finish("failed", True, "GMI success without a video URL")
+            return await finish(job, "failed", True, "GMI success without a video URL")
         job.status = "downloading"
-        dest = VIDEOS / f"{job.job_id}.mp4"
+        key = f"videos/{job.job_id}.mp4"
+        tmp = store.temp_path(key)
         # separate client: never send the GMI bearer to the storage host
         async with httpx.AsyncClient(timeout=httpx.Timeout(60, read=300), follow_redirects=True) as dl:
             async with dl.stream("GET", job.gmi_video_url) as dr:
                 dr.raise_for_status()
-                with dest.open("wb") as f:
+                with tmp.open("wb") as f:
                     async for chunk in dr.aiter_bytes():
                         f.write(chunk)
-        await finish("ready", True)
+        await store.put_file(tmp, key, "video/mp4")
+        await finish(job, "ready", True)
     except Exception as e:  # noqa: BLE001
-        # If GMI accepted the request we may be billed: commit rather than release.
-        await finish("failed", True if job.gmi_request_id else False, f"{type(e).__name__}: {e}")
+        # GMI accepted the request, so we may be billed: commit rather than release.
+        await finish(job, "failed", True, f"{type(e).__name__}: {e}")
 
 
 def public(job: Job, request: Request) -> dict[str, Any]:
     d = job.model_dump()
     if job.status == "ready":
         base = PUBLIC_BASE or str(request.base_url).rstrip("/")
+        if ON_CLOUD_RUN and base.startswith("http://"):
+            base = "https://" + base[len("http://"):]  # TLS ends at Google's front end
         d["video_url"] = f"{base}/jobs/{job.job_id}/video"
     return d
+
+
+async def recover_jobs() -> None:
+    """After a restart: reload jobs, resume polling the ones GMI accepted."""
+    for raw in await STATE["store"].list_json("jobs/"):
+        job = Job(**raw)
+        JOBS[job.job_id] = job
+        if job.status in TERMINAL:
+            continue
+        DONE[job.job_id] = asyncio.Event()
+        if job.gmi_request_id:
+            asyncio.create_task(poll_job(job))
+        else:
+            await finish(job, "failed", None, "server restarted before submit finished; reserve kept")
 
 
 # ---------------------------------------------------------------- app
@@ -276,13 +383,17 @@ async def lifespan(_: FastAPI):
     key = env("GMI_API_KEY")
     if not key:
         raise SystemExit("GMI_API_KEY not set (env or .env)")
+    if ON_CLOUD_RUN and not TOKEN:
+        raise SystemExit("MODEL_SERVER_TOKEN is required on Cloud Run: every call spends money")
     h = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if org := env("GMI_ORG_ID"):
         h["X-Organization-ID"] = org
-    VIDEOS.mkdir(parents=True, exist_ok=True)
     STATE["catalog"] = load_catalog()
-    STATE["ledger"] = Ledger(LEDGER, SPEND_CAP)
+    STATE["store"] = Store(GCS_BUCKET)
+    STATE["ledger"] = Ledger(STATE["store"], SPEND_CAP)
+    await STATE["ledger"].load()
     STATE["gmi"] = httpx.AsyncClient(headers=h, timeout=httpx.Timeout(60, read=120))
+    await recover_jobs()
     yield
     await STATE["gmi"].aclose()
 
@@ -297,7 +408,9 @@ def auth(authorization: str | None = Header(None)) -> None:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "models": len(STATE["catalog"]["models"]), "catalog_generated_at": STATE["catalog"]["generated_at"]}
+    return {"ok": True, "models": len(STATE["catalog"]["models"]),
+            "catalog_generated_at": STATE["catalog"]["generated_at"],
+            "storage": "gcs" if GCS_BUCKET else "local"}
 
 
 @app.get("/models", dependencies=[Depends(auth)])
@@ -343,6 +456,7 @@ async def generate(body: GenerateBody, request: Request, wait: bool = False, wai
     await STATE["ledger"].reserve(job.job_id, b.est_usd, f"{b.model} {b.duration:g}s")
     JOBS[job.job_id] = job
     DONE[job.job_id] = asyncio.Event()
+    await save_job(job)
     asyncio.create_task(run_job(job))
     if wait:
         try:
@@ -360,12 +474,17 @@ def get_job(job_id: str, request: Request) -> dict[str, Any]:
 
 
 @app.get("/jobs/{job_id}/video", dependencies=[Depends(auth)])
-def get_video(job_id: str) -> FileResponse:
+async def get_video(job_id: str) -> Response:
     job = JOBS.get(job_id)
-    path = VIDEOS / f"{job_id}.mp4"
-    if not job or job.status != "ready" or not path.exists():
+    if not job or job.status != "ready":
         raise HTTPException(404, "video not ready")
-    return FileResponse(path, media_type="video/mp4", filename=f"{job_id}.mp4")
+    got = await STATE["store"].get_file(f"videos/{job_id}.mp4")
+    if got is None:
+        raise HTTPException(404, "video file missing")
+    headers = {"Content-Disposition": f'inline; filename="{job_id}.mp4"'}
+    if isinstance(got, Path):
+        return FileResponse(got, media_type="video/mp4", headers=headers)
+    return Response(got, media_type="video/mp4", headers=headers)
 
 
 if __name__ == "__main__":

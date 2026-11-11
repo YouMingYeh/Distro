@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "distro-model",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "LEDGER", "class_name": "LedgerDO" },
+      { "name": "JOB", "class_name": "JobDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LedgerDO", "JobDO"] }],
+  // Create once: npx wrangler r2 bucket create distro-model-media
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "distro-model-media" }],
+  // Secrets (never here): npx wrangler secret put GMI_API_KEY / MODEL_SERVER_TOKEN [/ GMI_ORG_ID]
+  "vars": {
+    "SPEND_CAP_USD": "9",
+    "MAX_RENDER_USD": "1.00",
+    // Spend committed on the Python server before this Worker existed; only read on the ledger's first use.
+    "INITIAL_COMMITTED_USD": "2.405"
+  }
+}
