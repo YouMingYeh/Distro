@@ -23,7 +23,7 @@ export function CopyButton({ text }: { text: string }) {
 
 export function Code({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto font-mono text-[13px] leading-6">
+    <pre tabIndex={0} className="overflow-x-auto font-mono text-[13px] leading-6">
       {children.split("\n").map((line, i) => (
         <span key={i} className={/^\s*(#|\/\/)/.test(line) ? "block text-muted" : "block"}>
           {line || " "}
