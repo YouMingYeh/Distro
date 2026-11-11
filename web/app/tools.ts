@@ -67,6 +67,25 @@ export const GROUPS: Group[] = [
 }`,
       },
       {
+        name: "list_all",
+        summary: "Everything the workspace has set up: profiles with their accounts, signed-in services, and which API keys are filled in.",
+        detail:
+          "A good first call. Key values are never returned, only whether one is set: yours means a key you saved through connect_keys, distro means the server has one you can use within the daily limit.",
+        params: [],
+        returns: `{
+  "profiles": [
+    {
+      "id": "prof_1a2b3c4d5e6f",
+      "name": "Default",
+      "default": true,
+      "accounts": [{ "account_id": "665f...", "platform": "tiktok", "username": "yourbrand", "active": true }]
+    }
+  ],
+  "services": [{ "name": "darkugc", "connected": false, "connect_with": "connect_darkugc" }],
+  "api_keys": [{ "service": "firecrawl", "yours": false, "distro": true }]
+}`,
+      },
+      {
         name: "list_profiles",
         summary: "The profiles in the workspace. A profile groups the accounts of one brand or client.",
         params: [],

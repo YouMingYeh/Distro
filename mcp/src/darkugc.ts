@@ -96,6 +96,9 @@ export async function darkugcCallback(url: URL): Promise<void> {
   await save(pending.ws, await token({ grant_type: "authorization_code", code, redirect_uri: redirectUri(), code_verifier: pending.verifier }));
 }
 
+/** Whether this workspace has signed in to DarkUGC. Does not check that the sign-in still works. */
+export const darkugcConnected = async (ws: string) => !!(await getSealed(`dugc:tok:${ws}`));
+
 const NOT_CONNECTED = "DarkUGC is not connected. Call connect_darkugc and give the user the link.";
 
 async function accessToken(ws: string): Promise<string> {

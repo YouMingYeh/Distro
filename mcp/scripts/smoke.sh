@@ -76,6 +76,8 @@ CODE2=$(curl -s -i -b "$JAR" -c "$JAR" "$BASE/authorize" --data-urlencode "handl
 TOKEN=$(curl -s "$BASE/oauth/token" -d "grant_type=authorization_code&client_id=$CLIENT_ID&code_verifier=$V2" \
   -d "code=$CODE2" --data-urlencode "redirect_uri=$REDIRECT" --data-urlencode "resource=$BASE" | json "['access_token']")
 rest list_profiles '{}' | grep -q '"name":"Default","default":true' || fail "no default profile"
+rest list_all '{}' | grep -q '"services":\[{"name":"darkugc","connected":false' || fail "list_all"
+rest list_all '{}' | grep -q '"service":"exa","yours":false' || fail "list_all keys"
 PID=$(rest create_profile '{"name":"Acme"}' | json "['id']")
 rest create_profile '{"name":"acme"}' | grep -q 'already exists' || fail "duplicate profile name allowed"
 rest rename_profile "{\"profile\":\"$PID\",\"name\":\"Acme Co\"}" | grep -q '"name":"Acme Co"' || fail "rename_profile"

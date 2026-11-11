@@ -3,12 +3,12 @@ import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
 import { z } from "zod";
 import { AD_GOALS, AD_PLATFORMS, adAnalytics, boostPost, connectAdsUrl, createAd, listAdAccounts, listAds, setAdStatus } from "./ads";
 import { accountRoute } from "./apikeys";
-import { darkugcCall, darkugcConnectUrl, darkugcTools } from "./darkugc";
+import { darkugcCall, darkugcConnected, darkugcConnectUrl, darkugcTools } from "./darkugc";
 import { env, PLATFORMS, type Props, type Scope } from "./env";
 import { generateVideo, getJob, listModels } from "./inference";
 import { KEY_NAMES, keysLink, userKeys, withKeys } from "./keys";
 import { findViral, getHook, KEY_SERVICES, PROVIDER_IDS, scrapePage, searchWeb, VIDEO_KEYS, WEB_IDS, WEB_KEYS } from "./scrapers";
-import { createProfile, deleteProfile, listProfiles, renameProfile, useProfile } from "./profiles";
+import { createProfile, deleteProfile, listProfiles, readProfiles, renameProfile, useProfile } from "./profiles";
 import { connectUrl, createPost, listAccounts } from "./zernio";
 
 type Tool<S extends z.ZodRawShape = z.ZodRawShape> = {
@@ -125,6 +125,28 @@ export const TOOLS: Record<string, Tool> = {
       const p = await useProfile(ws, a.profile);
       const accounts = await listAccounts(p.zernioId);
       return { profile: p.name, accounts: a.platform ? accounts.filter((x) => x.platform === a.platform) : accounts };
+    },
+  }),
+  list_all: tool({
+    scope: "accounts",
+    description:
+      "Everything this workspace has set up, in one call: each profile with its connected accounts, which outside services are signed in (DarkUGC), and which scraper API keys are filled in. Key values are never returned. Call this first to see what is ready and what still needs a connect_ tool.",
+    input: {},
+    run: async (ws) => {
+      const [profiles, own, darkugc] = await Promise.all([readProfiles(ws), userKeys(ws), darkugcConnected(ws)]);
+      const server = env as unknown as Record<string, unknown>;
+      return {
+        profiles: await Promise.all(
+          profiles.map(async (p, i) => {
+            // A profile that never reached Zernio has no accounts; do not create one just to look.
+            const accounts = p.zernio_id ? await listAccounts(p.zernio_id).catch((e: Error) => e.message) : [];
+            return { id: p.id, name: p.name, default: i === 0, ...(typeof accounts === "string" ? { accounts: [], accounts_error: accounts } : { accounts }) };
+          }),
+        ),
+        services: [{ name: "darkugc", connected: darkugc, connect_with: "connect_darkugc" }],
+        // yours: the user saved their own key (connect_keys). distro: this server has one, with a daily limit.
+        api_keys: KEY_NAMES.map((n) => ({ service: KEY_SERVICES[n], yours: !!own[n], distro: !!server[n] })),
+      };
     },
   }),
   list_profiles: tool({
