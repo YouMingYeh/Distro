@@ -31,6 +31,9 @@ class VideoRequest:
     audio_url: str | None = None  # drives lip sync where supported (Wan 3.0, wan2.6/2.7)
     audio: bool = True  # generate an audio track where the model has a switch
     seed: int | None = None
+    video: str | None = None  # public URL of a source video to edit / extend / transform
+    video_task: str | None = None  # "edit" or "extend", for models that switch modes with `task`
+    reference_videos: list[str] | None = None  # public URLs guiding motion, style or character
 
 
 @dataclass
@@ -152,7 +155,7 @@ def build(entry: dict[str, Any], req: VideoRequest) -> Built:
         w = min(w, int(m["width"].get("max_value") or w))
         h = min(h, int(m["height"].get("max_value") or h))
         p[m["width"]["name"]], p[m["height"]["name"]] = w, h
-    elif "aspect" not in m:
+    elif "aspect" not in m and not (req.video and "video" in m):  # an edit follows the source framing
         warn.append("model has no aspect control; output is likely 16:9")
 
     # resolution (or Kling-style quality tier)
@@ -178,11 +181,43 @@ def build(entry: dict[str, Any], req: VideoRequest) -> Built:
             p[name("reference_images")] = [val]
         else:
             warn.append(f"{slot} not supported by this model; ignored")
+
+    def put_videos(slot: str, urls: list[str]) -> None:
+        q = m[slot]
+        cap = q.get("max_value")
+        if cap and len(urls) > int(cap):
+            warn.append(f"{q['name']} takes at most {cap} video(s); extra ones dropped")
+            urls = urls[: int(cap)]
+        many = (cap is None and q.get("type") == "json") or (cap is not None and int(cap) > 1)
+        p[q["name"]] = urls if many else urls[0]
+
+    refs = list(req.reference_videos or [])
+    if req.video:
+        if "video" in m:
+            put_videos("video", [req.video])
+        elif "reference_videos" in m:
+            refs = [req.video, *refs]
+            warn.append("model has no source-video input; `video` used as a reference video instead")
+        else:
+            warn.append("video not supported by this model; ignored")
+    if refs:
+        if "reference_videos" in m:
+            put_videos("reference_videos", refs)
+        else:
+            warn.append("reference_videos not supported by this model; ignored")
+
     if "task" in m:
         opts = [str(o) for o in m["task"].get("options") or []]
-        want = "image_to_video" if req.first_frame else "text_to_video"
+        if req.video and "video" in m:
+            want = req.video_task or "edit"
+        elif req.first_frame:
+            want = "image_to_video"
+        else:
+            want = "text_to_video"
         if want in opts:
             p[name("task")] = want
+        elif req.video_task:
+            warn.append(f"video_task '{req.video_task}' not offered ({opts}); left to the model")
 
     # switches
     if "audio_gen" in m:
@@ -197,6 +232,9 @@ def build(entry: dict[str, Any], req: VideoRequest) -> Built:
     missing = [q["name"] for q in entry["params"]
                if q.get("required") and q["name"] not in p and q.get("default_value") in (None, "")]
     if missing:
+        vids = [q for q in missing if q in (m.get("video", {}).get("name"), m.get("reference_videos", {}).get("name"))]
+        if vids:
+            raise ValueError(f"{entry['id']} needs a source video: pass `video` (a public URL or an upload id)")
         raise ValueError(f"{entry['id']}: required params not covered: {missing}")
 
     est, src = estimate(entry, p, duration, req.audio)

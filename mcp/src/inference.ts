@@ -31,6 +31,9 @@ export type VideoInput = {
   negative_prompt?: string;
   first_frame?: string;
   audio_url?: string;
+  video?: string;
+  video_task?: "edit" | "extend";
+  reference_videos?: string[];
   dry_run?: boolean;
 };
 type ServerJob = { job_id: string; model: string; status: string; est_usd: number; duration_s: number; warnings: string[]; error: string | null };

@@ -8,6 +8,8 @@
     POST /generate?wait=true  block until the video is ready (or wait_timeout), then return the job
     GET  /jobs/{id}           job status, cost, video_url
     GET  /jobs/{id}/video     the finished mp4
+    POST /uploads             upload a video / image / audio file; returns an upload_id for /generate
+    GET  /files/{upload_id}   signed, expiring link to an upload (no token; this is what GMI fetches)
     GET  /models              selectable models with flags and a 5s estimate
     GET  /spend               spend cap, reserved, committed
     GET  /health
@@ -34,8 +36,11 @@ resume polling.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import tempfile
@@ -76,6 +81,20 @@ TOKEN = env("MODEL_SERVER_TOKEN")
 PUBLIC_BASE = (env("PUBLIC_BASE_URL") or "").rstrip("/")
 GCS_BUCKET = env("GCS_BUCKET")
 ON_CLOUD_RUN = bool(os.environ.get("K_SERVICE"))
+
+# Uploads: Cloud Run caps a request body at 32 MiB, so stay just under it.
+UPLOAD_MAX_BYTES = int(env("UPLOAD_MAX_BYTES", str(32 * 1024 * 1024 - 64 * 1024)))
+FILE_URL_TTL_S = int(env("FILE_URL_TTL_S", "86400"))
+# Key for signed /files links. Derived from the bearer token unless set, so it survives restarts.
+FILES_KEY = (env("FILES_SIGNING_SECRET")
+             or (hmac.new(TOKEN.encode(), b"distro-files", hashlib.sha256).hexdigest() if TOKEN else secrets.token_hex(32))
+             ).encode()
+MEDIA_TYPES = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+               "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
+               "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav"}
+EXT_TYPES = {"mp4": "video/mp4", "mov": "video/quicktime", "webm": "video/webm", "png": "image/png",
+             "jpg": "image/jpeg", "webp": "image/webp", "mp3": "audio/mpeg", "wav": "audio/wav"}
+UPLOAD_RE = re.compile(r"^upload_[0-9a-f]{16}\.(mp4|mov|webm|png|jpg|webp|mp3|wav)$")
 
 
 # ---------------------------------------------------------------- storage
@@ -134,6 +153,11 @@ class Store:
             return  # temp_path already is the final local path
         await asyncio.to_thread(self.bucket.blob(key).upload_from_filename, str(path), content_type=content_type)
         path.unlink(missing_ok=True)
+
+    async def exists(self, key: str) -> bool:
+        if self.bucket:
+            return await asyncio.to_thread(self.bucket.blob(key).exists)
+        return (self.local / key).exists()
 
     async def get_file(self, key: str) -> bytes | Path | None:
         if self.bucket:
@@ -207,6 +231,9 @@ class GenerateBody(BaseModel):
     audio_url: str | None = Field(None, description="public wav/mp3 URL that drives lip sync (Wan)")
     audio: bool = True
     seed: int | None = None
+    video: str | None = Field(None, description="source video to edit / extend / transform: public URL or upload_id")
+    video_task: Literal["edit", "extend"] | None = Field(None, description="for models that switch modes (Omni); default edit")
+    reference_videos: list[str] | None = Field(None, max_length=5, description="videos guiding motion, style or character: URLs or upload_ids")
     dry_run: bool = Field(False, description="build payload + estimate, do not submit or spend")
 
 
@@ -353,14 +380,40 @@ async def poll_job(job: Job) -> None:
         await finish(job, "failed", True, f"{type(e).__name__}: {e}")
 
 
+def base_url(request: Request) -> str:
+    base = PUBLIC_BASE or str(request.base_url).rstrip("/")
+    if ON_CLOUD_RUN and base.startswith("http://"):
+        base = "https://" + base[len("http://"):]  # TLS ends at Google's front end
+    return base
+
+
 def public(job: Job, request: Request) -> dict[str, Any]:
     d = job.model_dump()
     if job.status == "ready":
-        base = PUBLIC_BASE or str(request.base_url).rstrip("/")
-        if ON_CLOUD_RUN and base.startswith("http://"):
-            base = "https://" + base[len("http://"):]  # TLS ends at Google's front end
-        d["video_url"] = f"{base}/jobs/{job.job_id}/video"
+        d["video_url"] = f"{base_url(request)}/jobs/{job.job_id}/video"
     return d
+
+
+def sign(name: str, exp: int) -> str:
+    return hmac.new(FILES_KEY, f"{exp}.{name}".encode(), hashlib.sha256).hexdigest()
+
+
+def file_url(name: str, request: Request) -> str:
+    exp = int(time.time()) + FILE_URL_TTL_S
+    return f"{base_url(request)}/files/{name}?exp={exp}&sig={sign(name, exp)}"
+
+
+async def media_ref(value: str | None, field: str, request: Request) -> str | None:
+    """A public http(s) URL passes through; an upload_id becomes a signed link GMI can fetch."""
+    if not value:
+        return None
+    if UPLOAD_RE.match(value):
+        if not await STATE["store"].exists(f"uploads/{value}"):
+            raise HTTPException(400, f"{field}: unknown upload_id {value}")
+        return file_url(value, request)
+    if value.startswith(("https://", "http://")):
+        return value
+    raise HTTPException(400, f"{field} must be a public http(s) URL or an upload_id from POST /uploads")
 
 
 async def recover_jobs() -> None:
@@ -414,13 +467,19 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/models", dependencies=[Depends(auth)])
-def models(all: bool = False) -> dict[str, Any]:
+def models(all: bool = False, video: bool = False) -> dict[str, Any]:
+    """Default: text-to-video at 9:16. ?video=true: models that take a video. ?all=true: everything."""
     out = []
     probe = VideoRequest(prompt="x")
     for e in STATE["catalog"]["models"]:
-        ok = e["selectable"] and e["text_to_video"] and e["supports_9_16"]
+        if video:
+            ok = e["selectable"] and (e.get("video_input") or e.get("reference_video"))
+        else:
+            ok = e["selectable"] and e["text_to_video"] and e["supports_9_16"]
         if not ok and not all:
             continue
+        if video:
+            probe = VideoRequest(prompt="x", video="https://example.com/v.mp4")
         try:
             est = build(e, probe).est_usd
         except ValueError:
@@ -428,7 +487,8 @@ def models(all: bool = False) -> dict[str, Any]:
         out.append({"id": e["id"], "tier": e["featured"], "provider": e["provider"],
                     "est_usd_5s_720p": est, "text_to_video": e["text_to_video"],
                     "image_to_video": e["image_to_video"], "supports_9_16": e["supports_9_16"],
-                    "audio_drive": "audio_drive" in e["map"], "description": e["description"]})
+                    "audio_drive": "audio_drive" in e["map"], "video_input": e.get("video_input", False),
+                    "reference_video": e.get("reference_video", False), "description": e["description"]})
     return {"tiers": STATE["catalog"]["featured"], "models": out}
 
 
@@ -440,7 +500,12 @@ def spend() -> dict[str, Any]:
 @app.post("/generate", dependencies=[Depends(auth)])
 async def generate(body: GenerateBody, request: Request, wait: bool = False, wait_timeout: float = 600) -> Any:
     entry = resolve_model(body.model)
-    req = VideoRequest(**body.model_dump(exclude={"model", "dry_run"}))
+    data = body.model_dump(exclude={"model", "dry_run"})
+    for k in ("first_frame", "last_frame", "audio_url", "video"):
+        data[k] = await media_ref(data[k], k, request)
+    if data["reference_videos"]:
+        data["reference_videos"] = [await media_ref(v, "reference_videos", request) for v in data["reference_videos"]]
+    req = VideoRequest(**data)
     try:
         b = build(entry, req)
     except ValueError as e:
@@ -464,6 +529,51 @@ async def generate(body: GenerateBody, request: Request, wait: bool = False, wai
         except asyncio.TimeoutError:
             pass  # return current status; client keeps polling GET /jobs/{id}
     return public(job, request)
+
+
+@app.post("/uploads", dependencies=[Depends(auth)])
+async def upload(request: Request) -> dict[str, Any]:
+    """Raw body upload: `curl --data-binary @clip.mp4 -H 'content-type: video/mp4' .../uploads`."""
+    ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    ext = MEDIA_TYPES.get(ctype)
+    if not ext:
+        raise HTTPException(415, f"content-type must be one of: {', '.join(sorted(MEDIA_TYPES))}")
+    if int(request.headers.get("content-length") or 0) > UPLOAD_MAX_BYTES:
+        raise HTTPException(413, f"file is larger than {UPLOAD_MAX_BYTES // (1024 * 1024)} MB")
+    store: Store = STATE["store"]
+    name = f"upload_{secrets.token_hex(8)}.{ext}"
+    key = f"uploads/{name}"
+    tmp = store.temp_path(key)
+    size = 0
+    too_big = False
+    with tmp.open("wb") as f:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > UPLOAD_MAX_BYTES:
+                too_big = True
+                break
+            f.write(chunk)
+    if too_big or size == 0:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(413 if too_big else 400,
+                            f"file is larger than {UPLOAD_MAX_BYTES // (1024 * 1024)} MB" if too_big else "empty body")
+    await store.put_file(tmp, key, ctype)
+    return {"upload_id": name, "bytes": size, "content_type": ctype,
+            "url": file_url(name, request), "url_expires_in_s": FILE_URL_TTL_S}
+
+
+@app.get("/files/{name}")
+async def get_upload(name: str, exp: int = 0, sig: str = "") -> Response:
+    """No bearer: the signature is the credential, so GMI can fetch it. Links expire."""
+    if not UPLOAD_RE.match(name) or exp < time.time() or not hmac.compare_digest(sig, sign(name, exp)):
+        raise HTTPException(403, "bad or expired link")
+    got = await STATE["store"].get_file(f"uploads/{name}")
+    if got is None:
+        raise HTTPException(404, "file missing")
+    ctype = EXT_TYPES[name.rsplit(".", 1)[1]]
+    if isinstance(got, Path):
+        return FileResponse(got, media_type=ctype)
+    return Response(got, media_type=ctype)
 
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(auth)])
