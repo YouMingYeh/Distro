@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { ArrowRight, GithubLogo } from "@phosphor-icons/react/dist/ssr";
 import { Code, CodeTabs, CopyButton } from "./code-tabs";
 import { ConnectPanel } from "./connect-panel";
+import { SignInButton } from "./me";
 import { isPlatform } from "./platforms";
 
 const BASE = process.env.NEXT_PUBLIC_DISTRO_URL?.replace(/\/$/, "") || "https://mcp.trydistro.app";
@@ -190,9 +191,12 @@ export default function Page({ searchParams }: PageProps<"/">) {
           <a href="#auth" className="hidden text-muted transition hover:text-fg md:block">
             Auth
           </a>
-          <a href="#install" className={primary}>
-            Add to your agent
-          </a>
+          <span className="hidden sm:block">
+            <a href="#install" className={primary}>
+              Add to your agent
+            </a>
+          </span>
+          <SignInButton />
         </nav>
       </header>
 

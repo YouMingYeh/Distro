@@ -1,10 +1,11 @@
 import { AuthorizationError, CimdFetchError, type ConsentDescription } from "@cloudflare/workers-oauth-provider";
 import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
-import { useProfile } from "./profiles";
+import { listApiKeys } from "./apikeys";
+import { readProfiles, useProfile } from "./profiles";
 import { darkugcCallback } from "./darkugc";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
 import { KEY_SERVICES } from "./scrapers";
-import { connectUrl } from "./zernio";
+import { connectUrl, listAccounts } from "./zernio";
 
 const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -107,6 +108,47 @@ async function signInCallback(req: Request): Promise<Response> {
   headers.append("Set-Cookie", setCookie(COOKIE, session, YEAR));
   headers.append("Set-Cookie", setCookie(STATE, "", 0));
   return new Response(null, { status: 302, headers });
+}
+
+/** The site's Sign in button. Signs in if needed, then lands on the dashboard. */
+async function signInStart(req: Request): Promise<Response> {
+  if (!env.CLERK_ISSUER || (await workspace(req))) return Response.redirect(`${env.WEB_ORIGIN}/dashboard`, 302);
+  return signIn(req); // comes back to /signin once signed in
+}
+
+// ponytail: a plain GET, so another site can sign a visitor out with a link. Nothing is lost
+// (accounts hang off the user, not the session). Make it a POST with a token if that changes.
+async function signOut(req: Request): Promise<Response> {
+  const headers = new Headers({ Location: env.WEB_ORIGIN });
+  const session = cookie(req, COOKIE);
+  if (env.CLERK_ISSUER && session) {
+    await env.OAUTH_KV.delete(`session:${session}`);
+    headers.append("Set-Cookie", setCookie(COOKIE, "", 0));
+  }
+  return new Response(null, { status: 302, headers });
+}
+
+/** What the site's header and dashboard show. Readable by the site only, with the session cookie. */
+async function me(req: Request): Promise<Response> {
+  const headers = {
+    "Access-Control-Allow-Origin": env.WEB_ORIGIN,
+    "Access-Control-Allow-Credentials": "true",
+    "Cache-Control": "no-store",
+    Vary: "Origin",
+  };
+  if (!env.CLERK_ISSUER) return Response.json({ sign_in: false }, { headers });
+  const ws = await workspace(req);
+  if (!ws) return Response.json({ sign_in: true, signed_in: false }, { headers });
+  const profiles = await Promise.all(
+    (await readProfiles(ws.id)).map(async (p, i) => ({
+      id: p.id,
+      name: p.name,
+      default: i === 0,
+      // A profile that never touched Zernio has no accounts. null means Zernio could not be asked.
+      accounts: p.zernio_id ? await listAccounts(p.zernio_id).catch(() => null) : [],
+    })),
+  );
+  return Response.json({ sign_in: true, signed_in: true, email: ws.email, profiles, api_keys: await listApiKeys(ws.id) }, { headers });
 }
 
 function page(title: string, body: string): string {
@@ -281,6 +323,9 @@ export const authHandler = {
     const url = new URL(req.url);
     if (url.pathname === "/authorize") return authorize(req);
     if (url.pathname === "/callback" && env.CLERK_ISSUER) return signInCallback(req);
+    if (url.pathname === "/signin") return signInStart(req);
+    if (url.pathname === "/signout") return signOut(req);
+    if (url.pathname === "/me" && req.method === "GET") return me(req);
     if (url.pathname === "/connect/callback") return connectCallback(url);
     if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
     if (url.pathname === "/keys") return keysPage(req, url);

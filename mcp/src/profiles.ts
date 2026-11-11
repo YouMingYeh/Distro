@@ -44,6 +44,9 @@ function cleanName(list: Profile[], raw: string, except?: Profile): string {
   return name;
 }
 
+/** Every profile with its Zernio id, for callers that must not create one as a side effect. */
+export const readProfiles = read;
+
 export async function listProfiles(workspaceId: string) {
   return (await read(workspaceId)).map(pub);
 }
