@@ -55,10 +55,25 @@ const TOOLS = [
   },
 ];
 
-const JOB_FLOW = [
-  ["Pick a model", "list_models returns what the server can call, so the agent never guesses an id."],
-  ["Start a job", "generate_video answers at once with a job id. A render never blocks a tool call."],
-  ["Collect the file", "get_job reports progress, then a video URL you can hand straight to publish."],
+const FLOWS = [
+  {
+    title: "Video models as jobs.",
+    lead: "Renders take minutes. Agents should not wait on them, so every model runs behind the same three calls.",
+    steps: [
+      ["Pick a model", "list_models returns what the server can call, so the agent never guesses an id."],
+      ["Start a job", "generate_video answers at once with a job id. A render never blocks a tool call."],
+      ["Collect the file", "get_job reports progress, then a video URL you can hand straight to publish."],
+    ],
+  },
+  {
+    title: "Paid ads, dry-run first.",
+    lead: "Meta, TikTok, Google, LinkedIn, X, Pinterest, Reddit and Microsoft ad accounts behind one set of tools. Nothing is spent until you say so.",
+    steps: [
+      ["Connect an ad account", "connect_ads returns a consent link. list_ad_accounts shows what each connection can spend from, with currency and billing state."],
+      ["Boost or create", "boost_post promotes a post you already published. create_ad builds a new ad from a video or image. Both only preview the request until dry_run is turned off."],
+      ["Watch and pause", "list_ads and get_ad_analytics report spend, impressions and clicks day by day. set_ad_status pauses an ad in one call."],
+    ],
+  },
 ];
 
 // Example payloads. Shapes follow the tool contracts; values are illustrative.
@@ -146,6 +161,46 @@ Agent   Rendering now.
 Agent   Here is the dry run. Nothing was posted.
         Say "post it" when you want it to go live.`,
   },
+  "Run an ad": {
+    MCP: `// tools/call
+{
+  "name": "boost_post",
+  "arguments": {
+    "post_id": "<post_id from publish>",
+    "account_id": "<from list_ad_accounts>",
+    "ad_account_id": "<from list_ad_accounts>",
+    "name": "Launch boost",
+    "goal": "video_views",
+    "budget_amount": 20,
+    "budget_type": "daily",
+    "countries": ["US"],
+    "dry_run": true
+  }
+}
+
+// result
+{
+  "dry_run": true,
+  "message": "Dry-run only; no ad was created and nothing will be spent."
+}`,
+    REST: `curl ${BASE}/api/tools/boost_post \\
+  -H "Authorization: Bearer $DISTRO_TOKEN" \\
+  -d '{
+    "post_id": "<post_id from publish>",
+    "account_id": "<from list_ad_accounts>",
+    "ad_account_id": "<from list_ad_accounts>",
+    "name": "Launch boost",
+    "goal": "video_views",
+    "budget_amount": 20,
+    "budget_type": "daily",
+    "countries": ["US"],
+    "dry_run": true
+  }'`,
+    Skill: `You     Put $20 a day behind yesterday's TikTok, US only.
+
+Agent   Here is the dry run: $20 daily, video views, US.
+        Nothing is spent yet. Confirm and I will start it.`,
+  },
 };
 
 const OAUTH_FLOW = `POST /mcp
@@ -219,7 +274,7 @@ export default function Page({ searchParams }: PageProps<"/">) {
               Social ads infra for agents.
             </h1>
             <p className="rise mt-6 max-w-[46ch] text-lg leading-relaxed text-muted" style={{ "--i": 1 } as React.CSSProperties}>
-              Give any agent the tools to connect social accounts, call video models and publish short-form video.
+              Give any agent the tools to connect social accounts, call video models, publish short-form video and run paid ads on it.
             </p>
             <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 2 } as React.CSSProperties}>
               <a href="#install" className={primary}>
@@ -261,22 +316,22 @@ export default function Page({ searchParams }: PageProps<"/">) {
           </div>
         </section>
 
-        <section className="border-y border-line">
-          <div className={`${shell} py-16 md:py-20`}>
-            <h2 className={h2}>Video models as jobs.</h2>
-            <p className="mt-4 max-w-[60ch] text-muted">
-              Renders take minutes. Agents should not wait on them, so every model runs behind the same three calls.
-            </p>
-            <dl className="mt-12 grid gap-8 md:grid-cols-3">
-              {JOB_FLOW.map(([name, desc]) => (
-                <div key={name} className="border-l-2 border-accent pl-4">
-                  <dt className="text-lg font-medium">{name}</dt>
-                  <dd className="mt-1.5 max-w-[40ch] text-sm leading-relaxed text-muted">{desc}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </section>
+        {FLOWS.map(({ title, lead, steps }, i) => (
+          <section key={title} className={`border-line ${i ? "border-b" : "border-y"}`}>
+            <div className={`${shell} py-16 md:py-20`}>
+              <h2 className={h2}>{title}</h2>
+              <p className="mt-4 max-w-[60ch] text-muted">{lead}</p>
+              <dl className="mt-12 grid gap-8 md:grid-cols-3">
+                {steps.map(([name, desc]) => (
+                  <div key={name} className="border-l-2 border-accent pl-4">
+                    <dt className="text-lg font-medium">{name}</dt>
+                    <dd className="mt-1.5 max-w-[40ch] text-sm leading-relaxed text-muted">{desc}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </section>
+        ))}
 
         <section id="interfaces" className={`${shell} scroll-mt-8 py-16 md:py-24`}>
           <h2 className={h2}>Three ways in. Same tools.</h2>

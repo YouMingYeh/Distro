@@ -9,7 +9,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Distro: social ads infra for agents",
   description:
-    "Agent tools for social: connect accounts, call video models, and publish short-form video through MCP, REST, or a Skill.",
+    "Agent tools for social: connect accounts, call video models, publish short-form video, and run paid ads through MCP, REST, or a Skill.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
