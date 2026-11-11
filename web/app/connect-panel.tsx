@@ -2,7 +2,7 @@ import { ArrowUpRight, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { siInstagram, siThreads, siTiktok, siX, siYoutube } from "simple-icons";
 import type { Platform } from "./platforms";
 
-const ROWS: { id: Platform; name: string; path: string }[] = [
+export const ROWS: { id: Platform; name: string; path: string }[] = [
   { id: "tiktok", name: "TikTok", path: siTiktok.path },
   { id: "instagram", name: "Instagram", path: siInstagram.path },
   { id: "youtube", name: "YouTube", path: siYoutube.path },

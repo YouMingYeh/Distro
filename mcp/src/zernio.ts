@@ -26,8 +26,9 @@ export async function deleteZernioProfile(zernioId: string): Promise<void> {
   await call(`/profiles/${zernioId}`, { method: "DELETE" });
 }
 
-export async function connectUrl(zernioId: string, platform: Platform, origin: string): Promise<string> {
-  const query = new URLSearchParams({ profileId: zernioId, redirect_url: `${origin}/connect/callback?platform=${platform}` });
+/** `back` is appended to our own callback URL, so the callback knows which page started the flow. */
+export async function connectUrl(zernioId: string, platform: Platform, origin: string, back = ""): Promise<string> {
+  const query = new URLSearchParams({ profileId: zernioId, redirect_url: `${origin}/connect/callback?platform=${platform}${back}` });
   const { authUrl } = await call<{ authUrl: string }>(`/connect/${platform}?${query}`);
   return authUrl;
 }

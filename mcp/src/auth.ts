@@ -244,12 +244,13 @@ async function connectStart(req: Request, platform: string): Promise<Response> {
   const ws = await workspace(req);
   if (!ws) return signIn(req);
   let location: string;
+  const url = new URL(req.url);
+  const fromDashboard = url.searchParams.get("from") === "dashboard";
   try {
-    const url = new URL(req.url);
     const profile = await useProfile(ws.id, url.searchParams.get("profile") ?? undefined);
-    location = await connectUrl(profile.zernioId, platform, url.origin);
+    location = await connectUrl(profile.zernioId, platform, url.origin, fromDashboard ? "&from=dashboard" : "");
   } catch {
-    location = `${env.WEB_ORIGIN}/?error=connect_unavailable`;
+    location = `${env.WEB_ORIGIN}${fromDashboard ? "/dashboard" : "/"}?error=connect_unavailable`;
   }
   const headers = new Headers({ Location: location });
   if (ws.setCookie) headers.append("Set-Cookie", ws.setCookie);
@@ -258,7 +259,7 @@ async function connectStart(req: Request, platform: string): Promise<Response> {
 
 /** Zernio returns here after the platform's consent screen; hand the result to the site. */
 function connectCallback(url: URL): Response {
-  const to = new URL(env.WEB_ORIGIN);
+  const to = new URL(url.searchParams.get("from") === "dashboard" ? "/dashboard" : "/", env.WEB_ORIGIN);
   const platform = url.searchParams.get("platform");
   if (url.searchParams.get("connected") && isPlatform(platform)) {
     to.searchParams.set("connected", "1");
