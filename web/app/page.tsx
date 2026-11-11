@@ -38,6 +38,18 @@ const TOOLS = [
     ],
   },
   {
+    group: "Ads",
+    tools: [
+      ["connect_ads", "Returns a link to grant access to an ad account on Meta, TikTok, Google and more."],
+      ["list_ad_accounts", "The ad accounts each connection can spend from."],
+      ["boost_post", "Turns a published post into a paid ad. Dry-run unless told otherwise."],
+      ["create_ad", "A new ad from a video or image. Dry-run unless told otherwise."],
+      ["list_ads", "Ads with status, budget and results."],
+      ["set_ad_status", "Pauses or resumes one ad."],
+      ["get_ad_analytics", "Spend, impressions and clicks for one ad, day by day."],
+    ],
+  },
+  {
     group: "Publish",
     tools: [["publish", "Posts a video to linked accounts, now or on a schedule. Dry-run unless told otherwise."]],
   },
@@ -151,7 +163,7 @@ POST /oauth/register
 GET  /authorize?response_type=code
        &code_challenge=...&code_challenge_method=S256
        &resource=${BASE}
-       &scope=accounts video research publish
+       &scope=accounts video research publish ads
 POST /oauth/token
 
 POST /mcp

@@ -50,6 +50,7 @@ export const SCOPES = {
   video: "Run video models and read job status",
   research: "Search public videos and read public web pages",
   publish: "Create posts on connected accounts",
+  ads: "Connect ad accounts, create and pause paid ads, and read their results",
 } as const;
 export type Scope = keyof typeof SCOPES;
 

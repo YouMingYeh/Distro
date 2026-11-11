@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
 import { z } from "zod";
+import { AD_GOALS, AD_PLATFORMS, adAnalytics, boostPost, connectAdsUrl, createAd, listAdAccounts, listAds, setAdStatus } from "./ads";
 import { accountRoute } from "./apikeys";
 import { darkugcCall, darkugcConnectUrl, darkugcTools } from "./darkugc";
 import { env, PLATFORMS, type Props, type Scope } from "./env";
@@ -22,8 +23,91 @@ const platform = z.enum(PLATFORMS);
 const profile = z.string().min(1).max(60).optional().describe("Profile id or name. Default: the default profile.");
 const profileName = z.string().trim().min(1).max(60);
 
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
+const adId = z.string().regex(/^[A-Za-z0-9_]{1,64}$/).describe("ad_id from list_ads.");
+/** Shared by the two tools that spend money. */
+const spendInput = {
+  account_id: z.string().regex(/^[0-9a-f]{24}$/).describe("Connection to advertise from: account_id from list_ad_accounts."),
+  ad_account_id: z.string().min(1).max(64).describe("ad_account_id from list_ad_accounts."),
+  name: z.string().min(1).max(120),
+  goal: z.enum(AD_GOALS),
+  budget_amount: z.number().positive().max(100_000).describe("In whole units of the ad account's currency (50 = $50.00), not cents. Minimums: TikTok 20, Pinterest 5, others 1."),
+  budget_type: z.enum(["daily", "lifetime"]).default("daily"),
+  end_date: z.string().datetime({ offset: true }).optional().describe("When the ad stops. Required for a lifetime budget. Without it a daily budget keeps spending until paused."),
+  countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(50).optional().describe("ISO country codes. Required on TikTok."),
+  age_min: z.number().int().min(13).max(65).optional(),
+  age_max: z.number().int().min(13).max(65).optional(),
+  link_url: z.string().url().optional(),
+  call_to_action: z.string().regex(/^[A-Z_]{2,40}$/).optional().describe("For example LEARN_MORE, SHOP_NOW, SIGN_UP, DOWNLOAD. Needs link_url."),
+  start_paused: z.boolean().default(false).describe("Create it paused, so nothing is spent until set_ad_status makes it active."),
+  dry_run: z.boolean().default(true),
+  options: z.record(z.string(), z.unknown()).optional().describe("Extra platform-specific fields from Zernio's Ads API reference (docs.zernio.com), passed through as they are."),
+  profile,
+};
+const SPEND_RULE =
+  "This spends the user's real money. dry_run defaults to true and only returns what would be sent; set dry_run false only after the user has confirmed the budget, the dates and the audience in so many words.";
+
 /** Every tool, once. MCP and REST are two doors onto this table. */
 export const TOOLS: Record<string, Tool> = {
+  connect_ads: tool({
+    scope: "ads",
+    description:
+      "Get a link the user opens to grant access to their ad account on one platform (Meta via facebook or instagram, TikTok, LinkedIn, X, Pinterest, Google Ads, Reddit Ads, Microsoft Ads). The user needs an ad account with a payment method there already.",
+    input: { platform: z.enum(AD_PLATFORMS), profile },
+    run: (ws, a) => connectAdsUrl(ws, a.platform, a.profile),
+  }),
+  list_ad_accounts: tool({
+    scope: "ads",
+    description: "List the ad accounts each connection can advertise from, with currency and whether each can run ads right now. Gives the account_id and ad_account_id the other ad tools need.",
+    input: { profile },
+    run: (ws, a) => listAdAccounts(ws, a.profile),
+  }),
+  boost_post: tool({
+    scope: "ads",
+    description: `Turn an already published post into a paid ad that keeps its likes and comments. Pass post_id from publish, or the platform's own post id. ${SPEND_RULE}`,
+    input: {
+      post_id: z.string().regex(/^[0-9a-f]{24}$/).optional().describe("post_id returned by publish."),
+      platform_post_id: z.string().min(1).max(200).optional().describe("The platform's own id for a post that was not published through this server."),
+      ...spendInput,
+    },
+    run: (ws, a) => boostPost(ws, a),
+  }),
+  create_ad: tool({
+    scope: "ads",
+    description: `Create a new ad from a video or image, with its campaign. For platform-specific needs (Google keywords, TikTok identities, lead forms) add them in options. ${SPEND_RULE}`,
+    input: {
+      headline: z.string().max(255).optional().describe("Required on Meta, Google, Pinterest, LinkedIn and Reddit. Ignored on TikTok."),
+      body: z.string().min(1).max(2200).describe("The ad's main text."),
+      video_url: z.string().url().optional(),
+      image_url: z.string().url().optional(),
+      ...spendInput,
+    },
+    run: (ws, a) => createAd(ws, a),
+  }),
+  list_ads: tool({
+    scope: "ads",
+    description: "List the ads in a profile with status, budget and results over a date range (default: last 90 days). Includes ads made in the platform's own ads manager.",
+    input: {
+      status: z.enum(["active", "paused", "pending_review", "rejected", "completed", "cancelled", "error"]).optional(),
+      from_date: day.optional(),
+      to_date: day.optional(),
+      limit: z.number().int().min(1).max(100).default(25),
+      profile,
+    },
+    run: (ws, a) => listAds(ws, a),
+  }),
+  set_ad_status: tool({
+    scope: "ads",
+    description: "Pause or resume one ad. Pausing stops its spend. Resuming (active) starts spending again: only when the user has clearly asked.",
+    input: { ad_id: adId, status: z.enum(["active", "paused"]) },
+    run: (ws, a) => setAdStatus(ws, a.ad_id, a.status),
+  }),
+  get_ad_analytics: tool({
+    scope: "ads",
+    description: "One ad's results: spend, impressions, clicks and the daily timeline over a date range (default: last 90 days).",
+    input: { ad_id: adId, from_date: day.optional(), to_date: day.optional() },
+    run: (ws, a) => adAnalytics(ws, a),
+  }),
   connect_account: tool({
     scope: "accounts",
     description: "Get a link the user opens to connect a social account. Give the link to the user; the account is linked once they approve.",

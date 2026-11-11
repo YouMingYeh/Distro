@@ -27,7 +27,7 @@ import (
 
 var version = "dev" // set by -ldflags at release time
 
-const scopes = "accounts video research publish offline_access"
+const scopes = "accounts video research publish ads offline_access"
 
 type creds struct {
 	Base         string    `json:"base"`

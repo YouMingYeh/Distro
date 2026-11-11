@@ -61,6 +61,7 @@ curl -s -o /dev/null -w '%{http_code}' "$BASE/keys?t=nope" | grep -q 400 || fail
 rest get_video_hook '{"url":"https://example.com/x"}' | grep -q 'invalid_arguments' || fail "hook url not validated"
 # the token only has the video and research scopes: account tools must refuse
 rest list_accounts '{}' | grep -q 'lacks the' || fail "scope not enforced"
+rest boost_post '{}' | grep -q 'lacks the' || fail "ads scope not enforced"
 rest get_job '{"job_id":"nope"}' | grep -q 'invalid_arguments' || fail "input not validated"
 curl -s -o /dev/null -w '%{http_code}' "$BASE/api/tools/list_models" -d '{}' | grep -q 401 || fail "REST without token"
 # profiles: a second grant with the accounts scope. None of these calls needs Zernio.

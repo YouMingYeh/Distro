@@ -2,11 +2,11 @@ import { env, type Platform } from "./env";
 
 const API = "https://zernio.com/api/v1";
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!env.ZERNIO_API_KEY) throw new Error("Social accounts are not configured on this server (ZERNIO_API_KEY is unset).");
   const res = await fetch(API + path, {
     ...init,
-    headers: { Authorization: `Bearer ${env.ZERNIO_API_KEY}`, "Content-Type": "application/json" },
+    headers: { ...init?.headers, Authorization: `Bearer ${env.ZERNIO_API_KEY}`, "Content-Type": "application/json" },
   });
   if (!res.ok) throw new Error(`Zernio ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json();

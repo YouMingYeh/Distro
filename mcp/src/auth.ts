@@ -271,6 +271,15 @@ function connectCallback(url: URL): Response {
   return Response.redirect(to.toString(), 302);
 }
 
+/** Zernio returns the browser here after an ads connection. The user came from their agent, so say where to go back to. */
+function adsReturn(url: URL): Response {
+  const error = url.searchParams.get("error");
+  const body = error
+    ? `<h1>Ads account was not connected</h1><p>${esc((url.searchParams.get("error_message") ?? error).slice(0, 300))}</p>`
+    : "<h1>Ads account connected</h1><p>You can close this tab and go back to your agent.</p>";
+  return new Response(page("Ads", body), { status: error ? 400 : 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
 /** DarkUGC returns the browser here after its own sign-in and consent. */
 async function darkugcReturn(url: URL): Promise<Response> {
   let body = "<h1>DarkUGC connected</h1><p>You can close this tab and go back to your agent.</p>";
@@ -329,6 +338,7 @@ export const authHandler = {
     if (url.pathname === "/me" && req.method === "GET") return me(req);
     if (url.pathname === "/connect/callback") return connectCallback(url);
     if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
+    if (url.pathname === "/ads/callback") return adsReturn(url);
     if (url.pathname === "/keys") return keysPage(req, url);
     const platform = url.pathname.match(/^\/connect\/([a-z]+)$/)?.[1];
     if (platform && req.method === "GET") return connectStart(req, platform);
