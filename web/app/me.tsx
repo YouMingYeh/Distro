@@ -4,8 +4,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, ChatCircle, CheckCircle, Eye, Globe, Heart, Plus, WarningCircle } from "@phosphor-icons/react";
 import { CopyButton } from "./code-tabs";
 import { ROWS } from "./connect-panel";
+import { demoPosts, demoVideo, demoWorkspace } from "./dashboard/demo-data";
+import { SiteHeader, siteShell } from "./site-header";
+import { VideoPreview } from "./video-preview";
 
 const API = process.env.NEXT_PUBLIC_DISTRO_URL?.replace(/\/$/, "") || "https://mcp.trydistro.app";
+const DASHBOARD_DEMO =
+  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DISTRO_DASHBOARD_DEMO === "1";
 
 type Account = { account_id: string; platform: string; username?: string; active?: boolean };
 type Me = {
@@ -17,13 +22,14 @@ type Me = {
 };
 
 /** Who is signed in, from the backend's session cookie. `undefined` while loading, `null` if it cannot be reached. */
-function useMe() {
+function useMe(enabled = true) {
   const [me, setMe] = useState<Me | null>();
   useEffect(() => {
+    if (!enabled) return;
     fetch(`${API}/me`, { credentials: "include" })
       .then((r) => r.json())
       .then(setMe, () => setMe(null));
-  }, []);
+  }, [enabled]);
   return me;
 }
 
@@ -31,7 +37,8 @@ const pill = "inline-flex items-center rounded-full border border-line px-4 py-2
 
 /** Header button: Sign in, or Dashboard once signed in. Renders nothing when the server has no sign-in. */
 export function SignInButton() {
-  const me = useMe();
+  const me = useMe(!DASHBOARD_DEMO);
+  if (DASHBOARD_DEMO) return <a href="/dashboard" className={pill}>Dashboard</a>;
   if (!me?.sign_in) return null;
   return me.signed_in ? (
     <a href="/dashboard" className={pill}>
@@ -44,13 +51,104 @@ export function SignInButton() {
   );
 }
 
-const shell = "mx-auto w-full max-w-5xl px-4 md:px-8";
-const panel = "min-w-0 rounded-xl border border-line bg-surface p-2";
+const panel = "min-w-0 rounded-2xl border border-line bg-surface p-2";
 const row = "flex min-h-14 items-center gap-3 rounded-lg px-4 py-2 transition hover:bg-bg";
 const small = "inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-3.5 py-1.5 text-sm transition hover:border-fg active:scale-[0.98]";
 const MCP_INSTALL = `claude mcp add --transport http distro ${API}/mcp`;
+const sectionHeading = "mb-3 text-xl font-semibold tracking-tight sm:text-2xl";
+const dateFormat = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateFormat.format(date);
+}
 
 type Profile = NonNullable<Me["profiles"]>[number];
+
+function ProfileControls({ profiles, current, onPick, onAdd }: {
+  profiles: Profile[];
+  current?: Profile;
+  onPick: (id: string) => void;
+  onAdd: (profile: Profile) => void;
+}) {
+  const [naming, setNaming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
+    if (!name || pending) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch(`${API}/me/profiles?name=${encodeURIComponent(name)}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok || typeof data?.id !== "string" || typeof data.name !== "string") {
+        setError(typeof data?.error === "string" ? data.error : "Could not create the profile. Try again.");
+        return;
+      }
+      onAdd({ id: data.id, name: data.name, default: data.default === true, accounts: [] });
+      setNaming(false);
+    } catch {
+      setError("Could not create the profile. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {profiles.length > 1 && (
+        <select
+          aria-label="Profile"
+          value={current?.id ?? ""}
+          onChange={(event) => onPick(event.currentTarget.value)}
+          className="max-w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+        >
+          {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+        </select>
+      )}
+      {naming ? (
+        <form onSubmit={create} className="flex max-w-full flex-wrap items-center gap-2">
+          <input
+            name="name"
+            autoFocus
+            required
+            maxLength={60}
+            disabled={pending}
+            aria-label="Profile name"
+            placeholder="Profile name"
+            className="w-40 max-w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+          />
+          <button type="submit" disabled={pending} className={`${small} disabled:opacity-60`}>
+            {pending ? "Creating…" : "Create"}
+          </button>
+          <button type="button" disabled={pending} onClick={() => {
+            setNaming(false);
+            setError("");
+          }} className="px-2 py-1 text-sm text-muted hover:text-fg">
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setNaming(true)} className={`${small} text-muted`}>
+          <Plus size={14} aria-hidden />
+          New profile
+        </button>
+      )}
+      {error && <p role="alert" className="w-full text-sm text-muted">{error}</p>}
+    </div>
+  );
+}
 
 function Mark({ path }: { path?: string }) {
   if (!path) return <Globe size={20} className="shrink-0" aria-hidden />;
@@ -61,7 +159,7 @@ function Mark({ path }: { path?: string }) {
   );
 }
 
-function AccountRow({ account: a, name, path, href }: { account: Account; name: string; path?: string; href: string }) {
+function AccountRow({ account: a, name, path, href }: { account: Account; name: string; path?: string; href?: string }) {
   const stale = a.active === false;
   return (
     <li className={row}>
@@ -76,7 +174,7 @@ function AccountRow({ account: a, name, path, href }: { account: Account; name: 
             <WarningCircle size={16} />
             Needs reconnecting
           </span>
-          <a href={href} className={small}>
+          <a href={href} aria-disabled={!href || undefined} className={small}>
             Reconnect
           </a>
         </>
@@ -90,82 +188,17 @@ function AccountRow({ account: a, name, path, href }: { account: Account; name: 
   );
 }
 
-/** One pill per profile, then New profile. A profile holds one account per platform, so a second TikTok needs a second profile. */
-function ProfileTabs({ profiles, current, onPick, onAdd }: { profiles: Profile[]; current?: Profile; onPick: (id: string) => void; onAdd: (p: Profile) => void }) {
-  const [naming, setNaming] = useState(false);
-  const [error, setError] = useState("");
-  async function create(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = String(new FormData(e.currentTarget).get("name") ?? "").trim();
-    if (!name) return;
-    const r = await fetch(`${API}/me/profiles?name=${encodeURIComponent(name)}`, { method: "POST", credentials: "include" }).then(
-      (res) => res.json(),
-      () => ({ error: "The server could not be reached." }),
-    );
-    if (r.error) return setError(r.error);
-    setNaming(false);
-    setError("");
-    onAdd({ ...r, accounts: [] });
-  }
-  return (
-    <div className="mb-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {profiles.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            aria-pressed={p === current}
-            onClick={() => onPick(p.id)}
-            className={`${small} ${p === current ? "border-fg" : "text-muted"}`}
-          >
-            {p.name}
-          </button>
-        ))}
-        {naming ? (
-          <form onSubmit={create} className="flex items-center gap-2">
-            <input
-              name="name"
-              autoFocus
-              required
-              maxLength={60}
-              placeholder="Profile name"
-              aria-label="Profile name"
-              className="w-40 rounded-full border border-line bg-transparent px-3.5 py-1.5 text-sm outline-none focus:border-fg"
-            />
-            <button type="submit" className={small}>
-              Create
-            </button>
-            <button type="button" onClick={() => (setNaming(false), setError(""))} className="text-sm text-muted hover:text-fg">
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <button type="button" onClick={() => setNaming(true)} className={`${small} text-muted`}>
-            <Plus size={14} />
-            New profile
-          </button>
-        )}
-      </div>
-      {error && (
-        <p role="alert" className="mt-2 text-sm text-muted">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ProfilePanel({ profile: p }: { profile: Profile }) {
-  const connect = (platform: string) => `${API}/connect/${platform}?profile=${p.id}&from=dashboard`;
+function ProfilePanel({ profile: p, demo }: { profile: Profile; demo: boolean }) {
+  const connect = (platform: string) => demo ? undefined : `${API}/connect/${platform}?profile=${encodeURIComponent(p.id)}&from=dashboard`;
   const accounts = p.accounts ?? [];
   const known = new Set<string>(ROWS.map((r) => r.id));
   return (
     <section className={panel}>
       <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
-        <h2 className="text-sm font-medium">
+        <h3 className="text-sm font-medium">
           {p.name}
           {p.default && <span className="ml-2 font-normal text-muted">Default</span>}
-        </h2>
+        </h3>
         <p className="truncate font-mono text-xs text-muted">{p.id}</p>
       </div>
       {p.accounts === null && (
@@ -183,7 +216,7 @@ function ProfilePanel({ profile: p }: { profile: Profile }) {
             <li key={r.id} className={row}>
               <Mark path={r.path} />
               <span className="flex-1 text-sm text-muted">{r.name}</span>
-              <a href={connect(r.id)} className={small}>
+              <a href={connect(r.id)} aria-disabled={demo || undefined} className={small}>
                 Connect
                 <ArrowUpRight size={14} />
               </a>
@@ -221,75 +254,74 @@ type Post = {
 
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const SHOWN = 12;
+const postColumns = "grid grid-cols-[minmax(0,1fr)] items-center gap-x-3 px-3 sm:grid-cols-[minmax(0,1fr)_repeat(3,5rem)] sm:px-4";
+const postMetrics = [
+  { key: "views", label: "Views", icon: Eye },
+  { key: "likes", label: "Likes", icon: Heart },
+  { key: "comments", label: "Comments", icon: ChatCircle },
+] as const;
 
-function PostCard({ post: p }: { post: Post }) {
+function PostRow({ post: p }: { post: Post }) {
   const [broken, setBroken] = useState(false);
   const r = ROWS.find((x) => x.id === p.platform);
+  const published = p.published && formatDate(p.published);
   return (
-    <li className="min-w-0">
-      <a href={p.url} target="_blank" rel="noreferrer" className="group block">
-        <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-bg">
-          {p.thumbnail && !broken ? (
-            // Platform CDN links are signed and expire, so a dead one falls back to the platform mark.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.thumbnail}
-              alt=""
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              onError={() => setBroken(true)}
-              className="size-full object-cover transition group-hover:scale-[1.02]"
-            />
-          ) : (
-            <div className="grid size-full place-items-center text-muted">
+    <li className="min-w-0 border-t border-line">
+      <a href={p.url} target="_blank" rel="noreferrer" className={`${postColumns} rounded-lg py-2.5 ${p.url ? "transition-colors hover:bg-bg" : ""}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid h-12 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-bg text-muted">
+            {p.thumbnail && !broken ? (
+              // Platform CDN links can expire.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={p.thumbnail}
+                alt=""
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => setBroken(true)}
+                className="size-full object-cover"
+              />
+            ) : (
               <Mark path={r?.path} />
-            </div>
-          )}
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-8 text-xs font-medium text-white">
-            <span className="inline-flex items-center gap-1">
-              <Eye size={14} aria-label="Views" />
-              {compact.format(p.views)}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Heart size={14} aria-label="Likes" />
-              {compact.format(p.likes)}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <ChatCircle size={14} aria-label="Comments" />
-              {compact.format(p.comments)}
-            </span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{p.caption || "No caption"}</p>
+            <p className="mt-0.5 truncate text-xs text-muted">
+              {p.username ? `@${p.username}` : (r?.name ?? p.platform)}
+              {published && <> · {published}</>}
+            </p>
           </div>
         </div>
-        <p className="mt-2 line-clamp-2 text-sm leading-snug">{p.caption || "No caption"}</p>
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-          <span className="truncate">{p.username ? `@${p.username}` : (r?.name ?? p.platform)}</span>
-          {p.published && <span className="shrink-0">· {new Date(p.published).toLocaleDateString()}</span>}
-        </p>
+        <div className="mt-2 ml-12 flex flex-wrap gap-3 text-xs text-muted tabular-nums sm:contents">
+          {postMetrics.map(({ key, label, icon: Icon }) => (
+            <span key={key} className="inline-flex items-center gap-1 sm:justify-end sm:text-sm sm:text-fg">
+              <Icon size={14} className="sm:hidden" aria-hidden />
+              <span className="sr-only">{label} </span>
+              {compact.format(p[key])}
+            </span>
+          ))}
+        </div>
       </a>
     </li>
   );
 }
 
 /** Published posts for one profile with their numbers. Loads after the accounts, from its own request. */
-function Posts({ profileId }: { profileId: string }) {
-  const [posts, setPosts] = useState<Post[] | null>();
+function Posts({ profileId, demo }: { profileId: string; demo: boolean }) {
+  const [livePosts, setPosts] = useState<Post[] | null>();
+  const posts = demo ? demoPosts : livePosts;
   useEffect(() => {
+    if (demo) return;
     fetch(`${API}/me/posts?profile=${profileId}`, { credentials: "include" })
       .then((r) => r.json())
       .then((d: { posts?: Post[] | null }) => setPosts(d.posts ?? null), () => setPosts(null));
-  }, [profileId]);
+  }, [demo, profileId]);
 
-  const sum = (k: "views" | "likes" | "comments" | "shares") => (posts ?? []).reduce((n, p) => n + p[k], 0);
-  const stats: [string, number][] = [
-    ["Posts", posts?.length ?? 0],
-    ["Views", sum("views")],
-    ["Likes", sum("likes")],
-    ["Comments", sum("comments")],
-  ];
   return (
-    <section className={panel}>
+    <div className={panel}>
       <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
-        <h2 className="text-sm font-medium">Posts</h2>
+        <h3 className="text-sm font-medium">Published posts</h3>
         <p className="text-xs text-muted">Last 90 days</p>
       </div>
       {posts === undefined ? (
@@ -300,17 +332,27 @@ function Posts({ profileId }: { profileId: string }) {
         <p className="px-4 pb-3 text-sm text-muted">Nothing published in the last 90 days. New posts can take a while to show up.</p>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-4">
-            {stats.map(([label, value]) => (
-              <div key={label} className="rounded-lg bg-bg px-3 py-2.5">
+          <dl className="m-2 grid grid-cols-2 rounded-xl border border-line bg-bg sm:grid-cols-4">
+            <div className="px-3 py-2.5 sm:px-4">
+              <dt className="text-xs text-muted">Posts</dt>
+              <dd className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{compact.format(posts.length)}</dd>
+            </div>
+            {postMetrics.map(({ key, label }) => (
+              <div key={key} className="px-3 py-2.5 sm:px-4">
                 <dt className="text-xs text-muted">{label}</dt>
-                <dd className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{compact.format(value)}</dd>
+                <dd className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                  {compact.format(posts.reduce((total, post) => total + post[key], 0))}
+                </dd>
               </div>
             ))}
           </dl>
-          <ul className="grid grid-cols-2 gap-x-3 gap-y-5 p-2 sm:grid-cols-3">
+          <div className={`${postColumns} mt-3 hidden py-2 text-xs text-muted sm:grid`} aria-hidden>
+            <span>Post</span>
+            {postMetrics.map(({ label }) => <span key={label} className="text-right">{label}</span>)}
+          </div>
+          <ul>
             {posts.slice(0, SHOWN).map((p) => (
-              <PostCard key={p.id} post={p} />
+              <PostRow key={p.id} post={p} />
             ))}
           </ul>
           {posts.length > SHOWN && (
@@ -320,7 +362,7 @@ function Posts({ profileId }: { profileId: string }) {
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -328,7 +370,7 @@ function ApiKeys({ keys }: { keys: NonNullable<Me["api_keys"]> }) {
   return (
     <section className={panel}>
       <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
-        <h2 className="text-sm font-medium">API keys</h2>
+        <h3 className="text-sm font-medium">API keys</h3>
         <p className="font-mono text-xs text-muted">{keys.length}</p>
       </div>
       {keys.length ? (
@@ -338,7 +380,7 @@ function ApiKeys({ keys }: { keys: NonNullable<Me["api_keys"]> }) {
               <span className="min-w-0 text-sm">
                 <span className="block truncate">{k.name}</span>
                 <span className="block text-xs text-muted">
-                  {k.scopes.join(", ")}, created {new Date(k.created).toLocaleDateString()}
+                  {k.scopes.join(", ")}{k.created && `, created ${formatDate(k.created)}`}
                 </span>
               </span>
               <span className="font-mono text-xs text-muted">dk_…{k.ends_with}</span>
@@ -405,26 +447,34 @@ function Notice({ title, children, action }: { title: string; children: string; 
 }
 
 export function Dashboard() {
-  const me = useMe();
-  const signedIn = me?.sign_in && me.signed_in;
-  const [added, setAdded] = useState<Profile[]>([]); // created on this page since /me loaded
-  // Kept for the tab, so returning from a platform's consent screen lands on the same profile.
-  const [picked, setPicked] = useState<string | null>(() => {
+  const liveMe = useMe(!DASHBOARD_DEMO);
+  const me: Me | null | undefined = DASHBOARD_DEMO ? demoWorkspace : liveMe;
+  const signedIn = Boolean(me?.sign_in && me.signed_in);
+  const [added, setAdded] = useState<Profile[]>([]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const profiles = [...((signedIn && me?.profiles) || []), ...added];
+  const current = profiles.find((profile) => profile.id === picked) ?? profiles[0];
+  const count = profiles.reduce((n, p) => n + (p.accounts?.length ?? 0), 0);
+  // Return to the same profile after a platform's consent screen.
+  useEffect(() => {
+    if (DASHBOARD_DEMO) return;
     try {
-      return sessionStorage.getItem("distro-profile");
-    } catch {
-      return null;
-    }
-  });
-  const pick = (id: string) => {
+      setPicked(sessionStorage.getItem("distro-profile"));
+    } catch {}
+  }, []);
+
+  function pick(id: string) {
     setPicked(id);
     try {
       sessionStorage.setItem("distro-profile", id);
     } catch {}
-  };
-  const profiles = [...((signedIn && me.profiles) || []), ...added];
-  const current = profiles.find((p) => p.id === picked) ?? profiles[0];
-  const count = profiles.reduce((n, p) => n + (p.accounts?.length ?? 0), 0);
+  }
+
+  function addProfile(profile: Profile) {
+    setAdded((previous) => [...previous, profile]);
+    pick(profile.id);
+  }
+
   // Signed out: go straight to sign-in. The backend sends the browser back to /dashboard afterwards.
   const signedOut = !!me?.sign_in && !me.signed_in;
   useEffect(() => {
@@ -433,59 +483,72 @@ export function Dashboard() {
 
   return (
     <>
-      <header className={`${shell} flex h-16 items-center justify-between gap-4`}>
-        <a href="/" className="text-lg font-semibold tracking-tight">
-          Distro
-        </a>
-        {signedIn && (
-          <nav className="flex min-w-0 items-center gap-4 text-sm">
-            <span className="hidden truncate text-muted sm:block">{me.email}</span>
-            <a href={`${API}/signout`} className={pill}>
-              Sign out
-            </a>
-          </nav>
-        )}
-      </header>
+      <SiteHeader action={DASHBOARD_DEMO ? (
+        <span className="whitespace-nowrap text-xs text-muted">Demo data</span>
+      ) : signedIn && (
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="hidden max-w-40 truncate text-muted xl:block">{me?.email}</span>
+          <a href={`${API}/signout`} className={`${pill} whitespace-nowrap`}>Sign out</a>
+        </div>
+      )} />
 
-      <main className={`${shell} pb-24 pt-10 md:pt-16`}>
-        <h1 className="text-4xl font-semibold tracking-tighter md:text-5xl">Dashboard</h1>
-        <p className="mb-10 mt-3 text-muted">
-          {signedIn
-            ? count
-              ? `${count} ${count === 1 ? "account" : "accounts"} your agent can publish to.`
-              : "Connect an account so your agent has somewhere to publish."
-            : "Accounts and API keys for your Distro workspace."}
-        </p>
+      <main id="overview" className={`${siteShell} grid scroll-mt-6 gap-6 pt-8 pb-16 sm:gap-7 sm:pt-12 lg:pb-24`}>
+        <div className="mb-1">
+          <h1 className="text-[clamp(2.125rem,4.8vw,3.75rem)] leading-none font-semibold tracking-[-0.065em]">Dashboard</h1>
+          <p className="mt-3 max-w-[46ch] text-pretty text-sm leading-relaxed text-muted sm:text-base">
+            {DASHBOARD_DEMO
+              ? "Preview videos and track your social posts."
+              : signedIn
+                ? count
+                  ? `${count} ${count === 1 ? "account" : "accounts"} your agent can publish to.`
+                  : "Connect an account so your agent has somewhere to publish."
+                : "Accounts and API keys for your Distro workspace."}
+          </p>
+        </div>
+
+        <VideoPreview sample={DASHBOARD_DEMO ? demoVideo : undefined} />
 
         {me === undefined || signedOut ? (
           <Skeleton />
         ) : me === null ? (
-          <Notice title="The server could not be reached">Nothing was changed. Reload the page to try again.</Notice>
+          <Notice title="The server could not be reached">Reload to try again.</Notice>
         ) : !me.sign_in ? (
           <Notice title="No dashboard on this server">This server runs without sign-in, so there are no accounts to show here.</Notice>
         ) : (
           <>
-          <ProfileTabs profiles={profiles} current={current} onPick={pick} onAdd={(p) => (setAdded((a) => [...a, p]), pick(p.id))} />
-          <div className="grid items-start gap-4 md:grid-cols-[1.5fr_1fr]">
-            <div className="grid min-w-0 grid-cols-1 gap-4">
-              {current && <ProfilePanel profile={current} />}
-              {!!current?.accounts?.length && <Posts key={current.id} profileId={current.id} />}
-            </div>
-            <div className="grid min-w-0 grid-cols-1 gap-4">
-              <ApiKeys keys={me.api_keys ?? []} />
-              <section className={panel}>
-                <h2 className="px-4 pb-1 pt-3 text-sm font-medium">Add Distro to your agent</h2>
-                <p className="px-4 pb-1 text-sm leading-relaxed text-muted">
-                  Run this once in Claude Code. Other clients are on the{" "}
-                  <a href="/#install" className="text-fg underline underline-offset-4">
-                    home page
-                  </a>
-                  .
-                </p>
-                <Command text={MCP_INSTALL} />
+            {!DASHBOARD_DEMO && (
+              <ProfileControls profiles={profiles} current={current} onPick={pick} onAdd={addProfile} />
+            )}
+            <section id="posts" aria-labelledby="posts-heading" className="min-w-0 scroll-mt-6">
+              <h2 id="posts-heading" className={sectionHeading}>Posts</h2>
+              {current?.accounts?.length ? (
+                <Posts key={current.id} profileId={current.id} demo={DASHBOARD_DEMO} />
+              ) : (
+                <p className={`${panel} px-4 py-4 text-sm text-muted`}>Connect a social account to see its published posts.</p>
+              )}
+            </section>
+
+            <div className="grid min-w-0 items-start gap-6 md:grid-cols-[1.2fr_minmax(0,1fr)]">
+              <section id="social-accounts" aria-labelledby="social-accounts-heading" className="min-w-0 scroll-mt-6">
+                <h2 id="social-accounts-heading" className={sectionHeading}>Social accounts</h2>
+                {current && <ProfilePanel key={current.id} profile={current} demo={DASHBOARD_DEMO} />}
+              </section>
+              <section id="agent-setup" aria-labelledby="agent-setup-heading" className="min-w-0 scroll-mt-6">
+                <h2 id="agent-setup-heading" className={sectionHeading}>Agent setup</h2>
+                <div className="grid gap-4">
+                  <div className={panel}>
+                    <h3 className="px-4 pb-1 pt-3 text-sm font-medium">Add Distro to your agent</h3>
+                    <p className="px-4 pb-1 text-sm leading-relaxed text-muted">
+                      Run this once in Claude Code. See{" "}
+                      <a href="/#install" className="text-fg underline underline-offset-4">Setup</a>
+                      {" "}for other clients.
+                    </p>
+                    <Command text={MCP_INSTALL} />
+                  </div>
+                  <ApiKeys keys={me.api_keys ?? []} />
+                </div>
               </section>
             </div>
-          </div>
           </>
         )}
       </main>

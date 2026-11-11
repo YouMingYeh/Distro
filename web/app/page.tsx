@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { CaretDown, GithubLogo } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr";
 import { AgentDemo } from "./agent-demo";
 import { Code, CodeTabs, CopyableLine } from "./code-tabs";
 import { ConnectPanel } from "./connect-panel";
@@ -7,12 +7,11 @@ import { DistroMascot } from "./distro-mascot";
 import { SignInButton } from "./me";
 import { isPlatform } from "./platforms";
 import { SetupTabs } from "./setup-tabs";
+import { SiteHeader, siteShell, sourceUrl } from "./site-header";
 import { GROUPS } from "./tools";
-import "./distro-brand.css";
 
 const BASE = process.env.NEXT_PUBLIC_DISTRO_URL?.replace(/\/$/, "") || "https://mcp.trydistro.app";
 const MCP_URL = `${BASE}/mcp`;
-const REPO = "https://github.com/YouMingYeh/Distro";
 
 const CAPABILITIES = [
   ["Connect your accounts", "Link the social accounts your agent can publish to."],
@@ -189,7 +188,6 @@ POST /oauth/token
 POST /mcp
      Authorization: Bearer <access_token>`;
 
-const shell = "mx-auto w-full max-w-6xl px-5 sm:px-8";
 const sectionHeading = "text-2xl font-semibold tracking-tight sm:text-3xl";
 
 // Reads the callback params after a platform redirect; streamed so the page itself stays static.
@@ -205,26 +203,9 @@ async function Accounts({ searchParams }: Pick<PageProps<"/">, "searchParams">) 
 export default function Page({ searchParams }: PageProps<"/">) {
   return (
     <>
-      <header className="border-b border-line">
-        <div className={`${shell} flex h-16 items-center justify-between`}>
-          <a href="/" className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight">
-            <DistroMascot className="size-8 shrink-0" />
-            Distro
-          </a>
-          <nav aria-label="Main" className="flex items-center gap-3 text-sm sm:gap-5">
-            <a href="#install" className="hidden text-muted transition-colors hover:text-fg md:inline">Setup</a>
-            <a href="#tools" className="hidden text-muted transition-colors hover:text-fg md:inline">Tools</a>
-            <a href="/docs" className="text-muted transition-colors hover:text-fg">Docs</a>
-            <a href={REPO} aria-label="GitHub" className="inline-flex items-center gap-2 text-muted transition-colors hover:text-fg">
-              <GithubLogo size={17} aria-hidden />
-              <span className="hidden sm:inline">GitHub</span>
-            </a>
-            <SignInButton />
-          </nav>
-        </div>
-      </header>
+      <SiteHeader landing action={<SignInButton />} />
 
-      <main className={shell}>
+      <main className={siteShell}>
         <section aria-labelledby="hero-title" className="distro-hero">
           <div className="w-full min-w-0 text-center">
             <h1 id="hero-title" className="distro-hero-title">
@@ -334,10 +315,10 @@ export default function Page({ searchParams }: PageProps<"/">) {
           </details>
         </section>
       </main>
-      <footer className={`${shell} flex flex-wrap gap-x-5 gap-y-2 border-t border-line py-6 text-sm text-muted`}>
+      <footer className={`${siteShell} flex flex-wrap gap-x-5 gap-y-2 border-t border-line py-6 text-sm text-muted`}>
         <p className="mr-auto">Distro. Publishing runs on Zernio.</p>
         <a href="/privacy" className="transition-colors hover:text-fg">Privacy</a>
-        <a href={REPO} className="transition-colors hover:text-fg">Source on GitHub</a>
+        <a href={sourceUrl} className="transition-colors hover:text-fg">Source on GitHub</a>
       </footer>
     </>
   );
