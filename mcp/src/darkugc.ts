@@ -1,4 +1,5 @@
 import { env } from "./env";
+import { getSealed, putSealed } from "./keys";
 
 // DarkUGC's official agent door: a remote MCP server behind OAuth (https://darkugc.com/mcp).
 // Each workspace signs in with its own DarkUGC account, so that account's daily limits apply
@@ -60,7 +61,7 @@ async function save(ws: string, t: TokenResponse, previous?: Tokens): Promise<To
     refresh: t.refresh_token ?? previous?.refresh,
     expires_at: Date.now() + (t.expires_in ?? 3600) * 1000,
   };
-  await env.OAUTH_KV.put(`dugc:tok:${ws}`, JSON.stringify(tokens));
+  await putSealed(`dugc:tok:${ws}`, tokens); // encrypted at rest
   return tokens;
 }
 
@@ -98,7 +99,7 @@ export async function darkugcCallback(url: URL): Promise<void> {
 const NOT_CONNECTED = "DarkUGC is not connected. Call connect_darkugc and give the user the link.";
 
 async function accessToken(ws: string): Promise<string> {
-  const t = await env.OAUTH_KV.get<Tokens>(`dugc:tok:${ws}`, "json");
+  const t = await getSealed<Tokens>(`dugc:tok:${ws}`);
   if (!t) throw new Error(NOT_CONNECTED);
   if (t.expires_at - 60_000 > Date.now()) return t.access;
   if (!t.refresh) throw new Error(NOT_CONNECTED);

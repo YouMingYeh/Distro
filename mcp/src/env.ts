@@ -26,6 +26,11 @@ export interface Env {
   JINA_API_KEY?: string;
   TAVILY_API_KEY?: string;
   EXA_API_KEY?: string;
+  /** Secret: encrypts what users store here (their scraper keys, their DarkUGC tokens). Random, e.g. `openssl rand -base64 32`.
+   *  Unset means nothing can be saved. Changing it makes everything saved so far unreadable. */
+  KEYS_ENCRYPTION_KEY?: string;
+  /** Research calls a workspace may make per day on the keys above. Its own keys (connect_keys) are not counted. Default 20. */
+  FREE_DAILY_CALLS?: string;
 }
 
 export const env = raw as unknown as Env;
@@ -43,4 +48,5 @@ export const SCOPES = {
 export type Scope = keyof typeof SCOPES;
 
 /** What completeAuthorization() stores on a grant and every tool call receives. */
-export type Props = { workspaceId: string; scopes: string[] };
+/** `apiKey` is the id of the API key that authenticated the request; unset for an OAuth token. */
+export type Props = { workspaceId: string; scopes: string[]; apiKey?: string };

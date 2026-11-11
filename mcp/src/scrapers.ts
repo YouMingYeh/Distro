@@ -337,3 +337,11 @@ export const scrapePage = (keys: Keys, a: { url: string; provider?: WebId; max_c
 
 export const searchWeb = (keys: Keys, a: { query: string; limit: number; provider?: WebId }) =>
   firstOk(keys, "search", a.provider, async (p, key) => ({ results: (await p.search!(key, a.query, a.limit)).slice(0, a.limit) }));
+
+/** Every secret a workspace may bring itself: key name -> service. */
+export const VIDEO_KEYS = PROVIDER_IDS.map((id) => PROVIDERS[id].key);
+export const WEB_KEYS = WEB_IDS.map((id) => WEB[id].key);
+export const KEY_SERVICES: Record<string, string> = Object.fromEntries([
+  ...PROVIDER_IDS.map((id) => [PROVIDERS[id].key, id]),
+  ...WEB_IDS.map((id) => [WEB[id].key, id]),
+]);

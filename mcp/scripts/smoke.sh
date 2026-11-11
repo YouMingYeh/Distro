@@ -49,6 +49,12 @@ JOB=$(rest generate_video '{"prompt":"a cat"}' | json "['job_id']")
 rest get_job "{\"job_id\":\"$JOB\"}" | grep -q '"queued"' || fail "REST get_job"
 mcp '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' | grep -q '"find_viral_videos"' || fail "research tools not listed"
 rest darkugc_call '{"tool":"top_hooks"}' | grep -q 'not connected' || fail "darkugc without sign-in"
+KEYS_URL=$(rest connect_keys '{}' | json "['url']")
+curl -s "$KEYS_URL" | grep -q 'name="FIRECRAWL_API_KEY"' || fail "keys form"
+curl -s "$BASE/keys" -d "t=${KEYS_URL##*t=}" -d "EXA_API_KEY=smoke-test-key" | grep -q 'ends -key' || fail "key not saved"
+rest connect_keys '{}' | grep -q '"your_keys":\["exa"\]' || fail "saved key not listed"
+curl -s "$BASE/keys" -d "t=${KEYS_URL##*t=}" -d "remove_EXA_API_KEY=1" | grep -q 'ends -key' && fail "key not removed"
+curl -s -o /dev/null -w '%{http_code}' "$BASE/keys?t=nope" | grep -q 400 || fail "bad keys link accepted"
 rest get_video_hook '{"url":"https://example.com/x"}' | grep -q 'invalid_arguments' || fail "hook url not validated"
 # the token only has the video and research scopes: account tools must refuse
 rest list_accounts '{}' | grep -q 'lacks the' || fail "scope not enforced"

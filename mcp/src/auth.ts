@@ -2,6 +2,8 @@ import { AuthorizationError, CimdFetchError, type ConsentDescription } from "@cl
 import { env, isPlatform, SCOPES, type Props, type Scope } from "./env";
 import { useProfile } from "./profiles";
 import { darkugcCallback } from "./darkugc";
+import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
+import { KEY_SERVICES } from "./scrapers";
 import { connectUrl } from "./zernio";
 
 const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -40,7 +42,10 @@ async function signIn(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const state = crypto.randomUUID();
   // `legacy` is the pre-sign-in cookie workspace, if any, so its connected accounts are kept.
-  const pending = { returnTo: url.pathname + url.search, legacy: cookie(req, COOKIE) };
+  const verifier = crypto.randomUUID() + crypto.randomUUID(); // PKCE, which Clerk requires
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const pending = { returnTo: url.pathname + url.search, legacy: cookie(req, COOKIE), verifier };
   await env.OAUTH_KV.put(`signin:${state}`, JSON.stringify(pending), { expirationTtl: 600 });
   const to = new URL(`${env.CLERK_ISSUER}/oauth/authorize`);
   to.search = new URLSearchParams({
@@ -49,6 +54,8 @@ async function signIn(req: Request): Promise<Response> {
     response_type: "code",
     scope: "email profile",
     state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   }).toString();
   return new Response(null, { status: 302, headers: { Location: to.toString(), "Set-Cookie": setCookie(STATE, state, 600) } });
 }
@@ -65,7 +72,7 @@ async function signInCallback(req: Request): Promise<Response> {
   const code = url.searchParams.get("code");
   // The state must match this browser's cookie, so a link made in another browser cannot sign this one in.
   if (!state || !code || state !== cookie(req, STATE)) return fail("The sign-in expired or was cancelled. Start again.");
-  const pending = await env.OAUTH_KV.get<{ returnTo: string; legacy?: string }>(`signin:${state}`, "json");
+  const pending = await env.OAUTH_KV.get<{ returnTo: string; legacy?: string; verifier: string }>(`signin:${state}`, "json");
   if (!pending) return fail("The sign-in expired. Start again.");
   await env.OAUTH_KV.delete(`signin:${state}`); // single use
 
@@ -77,6 +84,7 @@ async function signInCallback(req: Request): Promise<Response> {
       client_secret: env.CLERK_OAUTH_CLIENT_SECRET ?? "",
       redirect_uri: signInRedirect(),
       grant_type: "authorization_code",
+      code_verifier: pending.verifier,
     }),
   });
   const { access_token } = (await tokenRes.json().catch(() => ({}))) as { access_token?: string };
@@ -233,6 +241,41 @@ async function darkugcReturn(url: URL): Promise<Response> {
   return new Response(page("DarkUGC", body), { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
+/** The form behind connect_keys. The one-time token in the link names the workspace, so it works in any browser. */
+async function keysPage(req: Request, url: URL): Promise<Response> {
+  const form = req.method === "POST" ? await req.formData() : null;
+  const t = form ? form.get("t") : url.searchParams.get("t");
+  const ws = await keysLinkWorkspace(t);
+  const send = (body: string, status = 200) =>
+    new Response(page("Your scraper keys", body), {
+      status,
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
+    });
+  if (!ws) return send("<h1>This link expired</h1><p>Ask your agent for a new one (connect_keys).</p>", 400);
+  let note = "";
+  if (form) {
+    try {
+      await saveKeys(ws, form);
+      note = "Saved.";
+    } catch (e) {
+      note = e instanceof Error ? e.message : "Could not save.";
+    }
+  }
+  const own = await userKeys(ws);
+  const input = "flex:1;min-width:0;font:inherit;padding:.35rem .6rem;border:1px solid var(--line);border-radius:8px;background:none;color:var(--fg)";
+  const rows = KEY_NAMES.map((name) => {
+    const saved = own[name];
+    return `<label><span style="width:7.5rem">${esc(KEY_SERVICES[name])}</span>
+<input type="password" name="${name}" autocomplete="off" style="${input}" placeholder="${saved ? `saved, ends ${esc(saved.slice(-4))}` : "not set"}">
+${saved ? `<span><input type="checkbox" name="remove_${name}" value="1"> remove</span>` : ""}</label>`;
+  }).join("");
+  return send(`<h1>Your scraper keys</h1>
+<p>Optional. With your own key for a service, research calls run on your account with no daily limit. Without one, they run on Distro's keys with a daily limit.</p>
+${note ? `<p><strong>${esc(note)}</strong></p>` : ""}
+<form method="post" action="/keys"><input type="hidden" name="t" value="${esc(String(t))}">${rows}
+<div class="row"><button value="approve">Save</button></div></form>`);
+}
+
 export const authHandler = {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
@@ -240,6 +283,7 @@ export const authHandler = {
     if (url.pathname === "/callback" && env.CLERK_ISSUER) return signInCallback(req);
     if (url.pathname === "/connect/callback") return connectCallback(url);
     if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
+    if (url.pathname === "/keys") return keysPage(req, url);
     const platform = url.pathname.match(/^\/connect\/([a-z]+)$/)?.[1];
     if (platform && req.method === "GET") return connectStart(req, platform);
     if (url.pathname === "/health") return Response.json({ ok: true });
