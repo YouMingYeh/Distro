@@ -14,3 +14,7 @@ node_modules/
 .wrangler/
 dist/
 .DS_Store
+
+# local deploy config with real resource ids
+wrangler.local.jsonc
+.env

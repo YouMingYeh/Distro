@@ -1,0 +1,27 @@
+{
+  "name": "distro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Distro: a self-hostable agent plugin (Skill + remote MCP server) that runs a short-form distribution pipeline.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "ffmpeg-service": "node scripts/ffmpeg-service.mjs --port 8788",
+    "db:migrate": "wrangler d1 migrations apply distro --remote",
+    "db:migrate:local": "wrangler d1 migrations apply distro --local"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "agents": "^0.33.0",
+    "aws4fetch": "^1.0.20",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.160.0"
+  }
+}

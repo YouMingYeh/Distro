@@ -1,0 +1,14 @@
+{
+  "name": "distro",
+  "description": "Distro: an agent plugin that runs short-form distribution (hook research, ranking, video generation, checks, dry-run publishing) through one MCP URL.",
+  "owner": {
+    "name": "Distro"
+  },
+  "plugins": [
+    {
+      "name": "distro",
+      "source": "./",
+      "description": "Replace your GTM team: research hooks, make short-form videos from footage you drop in chat, sanity-check them, and hand them to your scheduler."
+    }
+  ]
+}

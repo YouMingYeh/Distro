@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "note": "Generic hook pattern TYPES only. No brand lines and no source content. Used as the research fallback when live research is unavailable; hook lines are always written fresh from the current brand profile.",
+  "patterns": [
+    {
+      "id": "seed_hot_take",
+      "hook_type": "bold claim",
+      "format_family": "talking head then screen",
+      "why": "A confident, slightly contrarian opinion about the category makes people stop to agree or argue, and both reactions count as attention.",
+      "how_to_adapt": "State a counterintuitive belief the brand profile genuinely supports, then prove it with one screen recording of the product doing the thing."
+    },
+    {
+      "id": "seed_pov",
+      "hook_type": "pov",
+      "format_family": "on-screen text over product footage",
+      "why": "Putting the viewer inside a specific, familiar moment makes them recognise themselves before any product is mentioned.",
+      "how_to_adapt": "Describe a moment the stated audience already lives through, in second person, and let the footage show how the product fits into that moment."
+    },
+    {
+      "id": "seed_problem_punchline",
+      "hook_type": "problem",
+      "format_family": "talking head then screen",
+      "why": "Naming an annoying everyday problem first earns the right to show the product as the punchline instead of as an ad.",
+      "how_to_adapt": "Open on the frustration in the audience's own words, hold it for a beat, then cut to the product resolving exactly that frustration."
+    },
+    {
+      "id": "seed_curiosity_gap",
+      "hook_type": "curiosity gap",
+      "format_family": "screen recording with voiceover",
+      "why": "Promising a specific but unexplained payoff keeps viewers past the first three seconds to close the gap.",
+      "how_to_adapt": "Tease one concrete thing the product does without naming it, then reveal it on screen within the first eight seconds."
+    },
+    {
+      "id": "seed_late_discovery",
+      "hook_type": "story",
+      "format_family": "talking head then screen",
+      "why": "Admitting you did something the hard way for a long time, and only just found a better way, feels honest and makes the viewer wonder what they are missing.",
+      "how_to_adapt": "Frame the hook as a late discovery about the task the product handles. Do not invent a personal biography; keep it about the task."
+    },
+    {
+      "id": "seed_daily_ritual",
+      "hook_type": "demo",
+      "format_family": "day-in-the-life montage",
+      "why": "Showing a small repeatable habit makes the product feel like part of a routine rather than a one-off download.",
+      "how_to_adapt": "Pick one repeatable action from the footage (a check-in, a streak, a widget glance) and present it as the small ritual it enables."
+    },
+    {
+      "id": "seed_how_to_group",
+      "hook_type": "list",
+      "format_family": "numbered steps over screen recording",
+      "why": "A short how-to for a specific kind of person or group is easy to save and easy to share with the people it describes.",
+      "how_to_adapt": "Write two or three steps for the stated audience to get the main benefit, each step backed by one clip from the uploaded footage."
+    },
+    {
+      "id": "seed_before_after",
+      "hook_type": "before-after",
+      "format_family": "split or sequential comparison",
+      "why": "A visible contrast between the old way and the new way explains the value without a single claim having to be believed on faith.",
+      "how_to_adapt": "Describe the old way in one line, then show the product footage as the new way. Keep the before state truthful and unexaggerated."
+    },
+    {
+      "id": "seed_question",
+      "hook_type": "question",
+      "format_family": "talking head then screen",
+      "why": "A direct question the audience would answer yes to creates an immediate, personal reason to keep watching.",
+      "how_to_adapt": "Ask about a habit or wish the stated audience already has, then answer it with what the product actually does."
+    },
+    {
+      "id": "seed_what_we_actually_do",
+      "hook_type": "demo",
+      "format_family": "screen recording with voiceover",
+      "why": "Showing the real, unpolished way people use a product reads as a recommendation from a peer rather than a feature tour.",
+      "how_to_adapt": "Narrate one real usage moment from the footage as the thing people actually do with it, in casual first-person plural."
+    },
+    {
+      "id": "seed_replacement",
+      "hook_type": "bold claim",
+      "format_family": "on-screen text over product footage",
+      "why": "Saying a familiar tool or habit has been replaced gives viewers an instant reference point for what the product is.",
+      "how_to_adapt": "Name the generic habit or kind of tool the product stands in for (not a named competitor unless the profile lists one) and show the replacement in use."
+    },
+    {
+      "id": "seed_reaction",
+      "hook_type": "reaction",
+      "format_family": "talking head reacting to screen",
+      "why": "A genuine first reaction to seeing a feature borrows the viewer's own curiosity about what caused it.",
+      "how_to_adapt": "Open on a short surprised or delighted line, then cut to the exact product moment that would earn that reaction."
+    }
+  ]
+}
