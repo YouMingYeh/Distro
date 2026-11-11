@@ -354,6 +354,11 @@ export function Dashboard() {
   const signedIn = me?.sign_in && me.signed_in;
   const profiles = (signedIn && me.profiles) || [];
   const count = profiles.reduce((n, p) => n + (p.accounts?.length ?? 0), 0);
+  // Signed out: go straight to sign-in. The backend sends the browser back to /dashboard afterwards.
+  const signedOut = !!me?.sign_in && !me.signed_in;
+  useEffect(() => {
+    if (signedOut) window.location.replace(`${API}/signin`);
+  }, [signedOut]);
 
   return (
     <>
@@ -381,16 +386,12 @@ export function Dashboard() {
             : "Accounts and API keys for your Distro workspace."}
         </p>
 
-        {me === undefined ? (
+        {me === undefined || signedOut ? (
           <Skeleton />
         ) : me === null ? (
           <Notice title="The server could not be reached">Nothing was changed. Reload the page to try again.</Notice>
         ) : !me.sign_in ? (
           <Notice title="No dashboard on this server">This server runs without sign-in, so there are no accounts to show here.</Notice>
-        ) : !me.signed_in ? (
-          <Notice title="Sign in to see your accounts" action={{ href: `${API}/signin`, label: "Sign in" }}>
-            Your connected accounts and API keys live in your workspace.
-          </Notice>
         ) : (
           <div className="grid items-start gap-4 md:grid-cols-[1.5fr_1fr]">
             <div className="grid min-w-0 grid-cols-1 gap-4">
