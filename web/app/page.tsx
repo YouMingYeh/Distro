@@ -31,6 +31,7 @@ const TOOLS = [
       ["get_video_hook", "The spoken hook and full transcript of a TikTok video."],
       ["scrape_page", "Any public page as markdown, through Firecrawl, Jina, Tavily or Exa."],
       ["web_search", "Web results with titles, URLs and snippets."],
+      ["connect_keys", "Returns a link where the user adds their own scraper keys. Optional."],
       ["connect_darkugc", "Returns a sign-in link for the user's own DarkUGC account."],
       ["darkugc_call", "Top hooks, trends and niche breakdowns from the DarkUGC library."],
     ],
@@ -199,7 +200,7 @@ export default function Page({ searchParams }: PageProps<"/">) {
         <section className={`${shell} grid items-center gap-12 py-14 md:grid-cols-[1.15fr_1fr] md:gap-16 md:py-20`}>
           <div>
             <h1 className="rise text-5xl font-semibold leading-[1.02] tracking-tighter md:text-7xl">
-              Social tools for agents.
+              Social ads infra for agents.
             </h1>
             <p className="rise mt-6 max-w-[46ch] text-lg leading-relaxed text-muted" style={{ "--i": 1 } as React.CSSProperties}>
               Give any agent the tools to connect social accounts, call video models and publish short-form video.
@@ -304,9 +305,14 @@ export default function Page({ searchParams }: PageProps<"/">) {
 
       <footer className={`${shell} flex flex-col gap-2 py-8 text-sm text-muted md:flex-row md:justify-between`}>
         <p>Distro. Publishing runs on Zernio.</p>
-        <a href={REPO} className="transition hover:text-fg">
-          Source on GitHub
-        </a>
+        <span className="flex gap-5">
+          <a href="/privacy" className="transition hover:text-fg">
+            Privacy
+          </a>
+          <a href={REPO} className="transition hover:text-fg">
+            Source on GitHub
+          </a>
+        </span>
       </footer>
     </>
   );
