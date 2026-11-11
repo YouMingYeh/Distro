@@ -115,6 +115,7 @@ distro login --with-key < key.txt`;
 const ERRORS = [
   ['This token lacks the "ads" scope. Re-authorize and grant it.', "The scope was unticked on the consent screen. Connect again and leave it ticked."],
   ["Daily limit reached: 5 videos a day per workspace.", "Wait for the next UTC day. A dry run still works."],
+  ["This upload link is unknown, expired or already used.", "Call create_upload for a new link. A link takes one file, within 15 minutes."],
   ["Daily limit reached: 20 research calls a day run on Distro's keys.", "Call connect_keys and add your own scraper key, or wait for the next UTC day."],
   ['No connected tiktok account in profile "Default". Call connect_account first.', "Link an account on that platform in the profile you are publishing from."],
   ['No profile "Acme". Known profiles: Default.', "Check the name with list_profiles, or create it with create_profile."],

@@ -4,6 +4,7 @@ import { listApiKeys } from "./apikeys";
 import { createProfile, readProfiles, useProfile } from "./profiles";
 import { remoteCallback, SERVICES, type Service } from "./remote";
 import { videoFile } from "./inference";
+import { FILE_PATH, fileRoute } from "./uploads";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
 import { KEY_SERVICES } from "./scrapers";
 import { connectUrl, listAccounts, listPosts } from "./zernio";
@@ -377,6 +378,8 @@ export const authHandler = {
     if (platform && req.method === "GET") return connectStart(req, platform);
     const video = url.pathname.match(/^\/videos\/(job_[0-9a-f]{12})\.mp4$/)?.[1];
     if (video && req.method === "GET") return videoFile(video);
+    const file = url.pathname.match(FILE_PATH)?.[1];
+    if (file) return fileRoute(req, file);
     if (url.pathname === "/health") return Response.json({ ok: true });
     if (url.pathname === "/") return Response.redirect(env.WEB_ORIGIN, 302);
     return new Response("Not found", { status: 404 });

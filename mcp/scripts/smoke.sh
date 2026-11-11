@@ -50,6 +50,17 @@ rest list_models '{}' | grep -q '"fast"' || fail "REST list_models"
 rest generate_video '{"prompt":"a cat","dry_run":true}' | grep -q '"dry_run":true' || fail "REST generate_video"
 rest get_job '{"job_id":"job_000000000000"}' | grep -q 'Unknown job' || fail "another workspace's job is readable"
 curl -s -o /dev/null -w '%{http_code}' "$BASE/videos/job_000000000000.mp4" | grep -q 404 || fail "video link for a job that does not exist"
+# uploads: reserve a link, PUT a file once, read it back whole and by range
+UP=$(rest create_upload '{"content_type":"video/mp4"}' | json "['upload_url']")
+printf 'not-really-a-video' > "$JAR.mp4"
+curl -s -T "$JAR.mp4" -H 'Content-Type: text/html' "$UP" | grep -q '"bytes":18' || fail "upload refused"
+[ "$(curl -s "$UP")" = "not-really-a-video" ] || fail "uploaded file not served"
+curl -s -i "$UP" | grep -qi '^content-type: video/mp4' || fail "upload served with the sender's type"
+[ "$(curl -s -H 'Range: bytes=4-9' "$UP")" = "really" ] || fail "range not served"
+curl -s -I "$UP" | grep -qi '^content-length: 18' || fail "HEAD on an upload"
+curl -s -o /dev/null -w '%{http_code}' -T "$JAR.mp4" "$UP" | grep -q 403 || fail "upload link worked twice"
+curl -s -o /dev/null -w '%{http_code}' -T "$JAR.mp4" "${UP%/*}/up_00000000000000000000000000000000.mp4" | grep -q 403 || fail "upload without a reserved link"
+rm -f "$JAR.mp4"
 mcp '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' | grep -q '"find_viral_videos"' || fail "research tools not listed"
 rest darkugc_call '{"tool":"top_hooks"}' | grep -q 'not connected' || fail "darkugc without sign-in"
 KEYS_URL=$(rest connect_keys '{}' | json "['url']")

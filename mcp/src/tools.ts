@@ -10,6 +10,7 @@ import { findViral, getHook, KEY_SERVICES, PROVIDER_IDS, scrapePage, searchWeb, 
 import { DARKUGC, remoteCall, remoteConnected, remoteConnectUrl, remoteTools, SERVICES, TOKPORTAL } from "./remote";
 import { createProfile, deleteProfile, listProfiles, readProfiles, renameProfile, useProfile } from "./profiles";
 import { tokportalArgs, tokportalReads } from "./tokportal";
+import { createUpload, UPLOAD_TYPES, type UploadType } from "./uploads";
 import { connectUrl, createPost, listAccounts } from "./zernio";
 
 type Tool<S extends z.ZodRawShape = z.ZodRawShape> = {
@@ -182,6 +183,15 @@ export const TOOLS: Record<string, Tool> = {
     input: {},
     run: () => listModels(),
   }),
+  create_upload: tool({
+    scope: "video",
+    description:
+      "Get a one-time link for uploading a file from the user's machine (a clip, an image or an audio track), because a tool call cannot carry a file. PUT the file to upload_url within 15 minutes; `curl` is the whole command, and the limit is 100 MB. The same link then serves the file to anyone for 24 hours: pass it to generate_video as video, reference_videos, first_frame or audio_url, or to publish as video_url.",
+    input: {
+      content_type: z.enum(Object.keys(UPLOAD_TYPES) as [UploadType, ...UploadType[]]).default("video/mp4").describe("The file's media type."),
+    },
+    run: (ws, a) => createUpload(ws, a.content_type),
+  }),
   generate_video: tool({
     scope: "video",
     description:
@@ -200,7 +210,7 @@ export const TOOLS: Record<string, Tool> = {
         .url()
         .optional()
         .describe(
-          "Public URL of a source video to edit or extend, e.g. a video_url from get_job. Models: gemini-omni-1.2-flash (edit or extend), kling-o1-edit-video, wan2.7-videoedit, pixverse-v6-extend. Models without a source-video input use it as a reference video.",
+          "Public URL of a source video to edit or extend, e.g. a video_url from get_job or a url from create_upload. Models: gemini-omni-1.2-flash (edit or extend), kling-o1-edit-video, wan2.7-videoedit, pixverse-v6-extend. Models without a source-video input use it as a reference video.",
         ),
       video_task: z.enum(["edit", "extend"]).optional().describe("With `video` on gemini-omni models: edit the clip (default) or continue it."),
       reference_videos: z
