@@ -29,6 +29,7 @@ const SCOPES = [
   ["research", "Search public videos and read public web pages."],
   ["publish", "Create posts on connected accounts."],
   ["ads", "Connect ad accounts, create and pause paid ads, and read their results."],
+  ["managed", "Order managed accounts from TokPortal and post through them, on your TokPortal credits."],
   ["offline_access", "Lets the client refresh its token without asking you again."],
 ];
 
@@ -121,6 +122,7 @@ const ERRORS = [
   ["Give exactly one of post_id (from publish) or platform_post_id.", "boost_post takes one or the other, never both."],
   ["A lifetime budget needs end_date.", "Add end_date, or switch budget_type to daily."],
   ["DarkUGC is not connected. Call connect_darkugc and give the user the link.", "The user has not signed in to DarkUGC yet, or the sign-in expired."],
+  ["TokPortal is not connected. Call connect_tokportal and give the user the link.", "The user has not signed in to TokPortal yet, or revoked the key that sign-in made."],
   ["... is not configured on this server", "Self-hosted servers only: the secret named in the message is unset."],
 ];
 
@@ -468,7 +470,7 @@ Show me a dry run of posting it to TikTok.`}</Block>
                 ["Ad budget", "100,000 per ad", "In the ad account's currency. Minimums: TikTok 20, Pinterest 5, others 1."],
               ]}
             />
-            <p>DarkUGC calls run on your own DarkUGC account and follow its limits, not these.</p>
+            <p>DarkUGC and TokPortal calls run on your own account there and follow its limits and credits, not these.</p>
           </Section>
 
           <Section id="errors" title="Errors">

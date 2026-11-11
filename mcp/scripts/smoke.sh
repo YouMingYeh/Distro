@@ -61,6 +61,7 @@ curl -s -o /dev/null -w '%{http_code}' "$BASE/keys?t=nope" | grep -q 400 || fail
 rest get_video_hook '{"url":"https://example.com/x"}' | grep -q 'invalid_arguments' || fail "hook url not validated"
 # the token only has the video and research scopes: account tools must refuse
 rest list_accounts '{}' | grep -q 'lacks the' || fail "scope not enforced"
+rest tokportal_call '{"tool":"tokportal_create_bundle"}' | grep -q 'lacks the' || fail "managed scope not enforced"
 rest boost_post '{}' | grep -q 'lacks the' || fail "ads scope not enforced"
 rest get_job '{"job_id":"nope"}' | grep -q 'invalid_arguments' || fail "input not validated"
 curl -s -o /dev/null -w '%{http_code}' "$BASE/api/tools/list_models" -d '{}' | grep -q 401 || fail "REST without token"
@@ -69,14 +70,17 @@ V2=$(openssl rand -hex 32)
 C2=$(printf '%s' "$V2" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 H2=$(curl -s -b "$JAR" -c "$JAR" -G "$BASE/authorize" --data-urlencode "response_type=code" --data-urlencode "client_id=$CLIENT_ID" \
   --data-urlencode "redirect_uri=$REDIRECT" --data-urlencode "code_challenge=$C2" --data-urlencode "code_challenge_method=S256" \
-  --data-urlencode "resource=$BASE" --data-urlencode "scope=accounts" --data-urlencode "state=s2" \
+  --data-urlencode "resource=$BASE" --data-urlencode "scope=accounts managed" --data-urlencode "state=s2" \
   | sed -n 's/.*name="handle" value="\([^"]*\)".*/\1/p')
-CODE2=$(curl -s -i -b "$JAR" -c "$JAR" "$BASE/authorize" --data-urlencode "handle=$H2" -d "decision=approve&scope=accounts" \
+CODE2=$(curl -s -i -b "$JAR" -c "$JAR" "$BASE/authorize" --data-urlencode "handle=$H2" -d "decision=approve&scope=accounts&scope=managed" \
   | tr -d '\r' | sed -n 's/^[Ll]ocation: .*[?&]code=\([^&]*\).*/\1/p')
 TOKEN=$(curl -s "$BASE/oauth/token" -d "grant_type=authorization_code&client_id=$CLIENT_ID&code_verifier=$V2" \
   -d "code=$CODE2" --data-urlencode "redirect_uri=$REDIRECT" --data-urlencode "resource=$BASE" | json "['access_token']")
 rest list_profiles '{}' | grep -q '"name":"Default","default":true' || fail "no default profile"
 rest list_all '{}' | grep -q '"services":\[{"name":"darkugc","connected":false' || fail "list_all"
+rest list_all '{}' | grep -q '"name":"tokportal","connected":false,"connect_with":"connect_tokportal"' || fail "list_all tokportal"
+rest tokportal_call '{"tool":"tokportal_create_bundle"}' | grep -q 'TokPortal is not connected' || fail "tokportal without sign-in"
+rest tokportal_call '{"tool":"drop_everything"}' | grep -q 'invalid_arguments' || fail "tokportal tool name not validated"
 rest list_all '{}' | grep -q '"service":"exa","yours":false' || fail "list_all keys"
 PID=$(rest create_profile '{"name":"Acme"}' | json "['id']")
 rest create_profile '{"name":"acme"}' | grep -q 'already exists' || fail "duplicate profile name allowed"
@@ -84,7 +88,7 @@ rest rename_profile "{\"profile\":\"$PID\",\"name\":\"Acme Co\"}" | grep -q '"na
 rest list_accounts '{"profile":"nope"}' | grep -q 'No profile' || fail "unknown profile accepted"
 rest delete_profile '{"profile":"acme co"}' | grep -q "\"deleted\":\"$PID\"" || fail "delete_profile by name"
 rest delete_profile '{"profile":"Default"}' | grep -q 'only profile' || fail "deleted the only profile"
-# API keys: made from the OAuth session, inherit its scopes (accounts only), and cannot manage keys.
+# API keys: made from the OAuth session, inherit its scopes (accounts and managed), and cannot manage keys.
 keys() { curl -s -X "$1" "$BASE/api/api-keys$2" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"}; }
 MADE=$(keys POST "" '{"name":"smoke"}')
 KEY=$(printf '%s' "$MADE" | json "['key']"); KID=$(printf '%s' "$MADE" | json "['id']")

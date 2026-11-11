@@ -173,7 +173,7 @@ POST /oauth/register
 GET  /authorize?response_type=code
        &code_challenge=...&code_challenge_method=S256
        &resource=${BASE}
-       &scope=accounts video research publish ads
+       &scope=accounts video research publish ads managed
 POST /oauth/token
 
 POST /mcp
