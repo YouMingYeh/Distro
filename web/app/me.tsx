@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowUpRight, CheckCircle, Globe, Plus, WarningCircle } from "@phosphor-icons/react";
+import { Fragment, useEffect, useState } from "react";
+import { ArrowUpRight, ChatCircle, CheckCircle, Eye, Globe, Heart, Plus, WarningCircle } from "@phosphor-icons/react";
 import { CopyButton } from "./code-tabs";
 import { ROWS } from "./connect-panel";
 
@@ -150,6 +150,125 @@ function ProfilePanel({ profile: p }: { profile: Profile }) {
   );
 }
 
+type Post = {
+  id: string;
+  platform?: string;
+  username?: string;
+  caption?: string;
+  published?: string;
+  url?: string;
+  thumbnail?: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+};
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+const SHOWN = 12;
+
+function PostCard({ post: p }: { post: Post }) {
+  const [broken, setBroken] = useState(false);
+  const r = ROWS.find((x) => x.id === p.platform);
+  return (
+    <li className="min-w-0">
+      <a href={p.url} target="_blank" rel="noreferrer" className="group block">
+        <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-bg">
+          {p.thumbnail && !broken ? (
+            // Platform CDN links are signed and expire, so a dead one falls back to the platform mark.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={p.thumbnail}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setBroken(true)}
+              className="size-full object-cover transition group-hover:scale-[1.02]"
+            />
+          ) : (
+            <div className="grid size-full place-items-center text-muted">
+              <Mark path={r?.path} />
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-8 text-xs font-medium text-white">
+            <span className="inline-flex items-center gap-1">
+              <Eye size={14} aria-label="Views" />
+              {compact.format(p.views)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Heart size={14} aria-label="Likes" />
+              {compact.format(p.likes)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <ChatCircle size={14} aria-label="Comments" />
+              {compact.format(p.comments)}
+            </span>
+          </div>
+        </div>
+        <p className="mt-2 line-clamp-2 text-sm leading-snug">{p.caption || "No caption"}</p>
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+          <span className="truncate">{p.username ? `@${p.username}` : (r?.name ?? p.platform)}</span>
+          {p.published && <span className="shrink-0">· {new Date(p.published).toLocaleDateString()}</span>}
+        </p>
+      </a>
+    </li>
+  );
+}
+
+/** Published posts for one profile with their numbers. Loads after the accounts, from its own request. */
+function Posts({ profileId }: { profileId: string }) {
+  const [posts, setPosts] = useState<Post[] | null>();
+  useEffect(() => {
+    fetch(`${API}/me/posts?profile=${profileId}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d: { posts?: Post[] | null }) => setPosts(d.posts ?? null), () => setPosts(null));
+  }, [profileId]);
+
+  const sum = (k: "views" | "likes" | "comments" | "shares") => (posts ?? []).reduce((n, p) => n + p[k], 0);
+  const stats: [string, number][] = [
+    ["Posts", posts?.length ?? 0],
+    ["Views", sum("views")],
+    ["Likes", sum("likes")],
+    ["Comments", sum("comments")],
+  ];
+  return (
+    <section className={panel}>
+      <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
+        <h2 className="text-sm font-medium">Posts</h2>
+        <p className="text-xs text-muted">Last 90 days</p>
+      </div>
+      {posts === undefined ? (
+        <div aria-busy aria-label="Loading posts" className="m-2 h-24 rounded-lg bg-line motion-safe:animate-pulse" />
+      ) : posts === null ? (
+        <p className="mx-2 mb-2 rounded-lg bg-bg px-3 py-2 text-sm text-muted">Posts could not be loaded right now. Reload to try again.</p>
+      ) : posts.length === 0 ? (
+        <p className="px-4 pb-3 text-sm text-muted">Nothing published in the last 90 days. New posts can take a while to show up.</p>
+      ) : (
+        <>
+          <dl className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-4">
+            {stats.map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-bg px-3 py-2.5">
+                <dt className="text-xs text-muted">{label}</dt>
+                <dd className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{compact.format(value)}</dd>
+              </div>
+            ))}
+          </dl>
+          <ul className="grid grid-cols-2 gap-x-3 gap-y-5 p-2 sm:grid-cols-3">
+            {posts.slice(0, SHOWN).map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
+          </ul>
+          {posts.length > SHOWN && (
+            <p className="px-4 pb-3 pt-1 text-xs text-muted">
+              Showing the {SHOWN} newest of {posts.length}. The totals count all of them.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function ApiKeys({ keys }: { keys: NonNullable<Me["api_keys"]> }) {
   return (
     <section className={panel}>
@@ -276,7 +395,10 @@ export function Dashboard() {
           <div className="grid items-start gap-4 md:grid-cols-[1.5fr_1fr]">
             <div className="grid min-w-0 grid-cols-1 gap-4">
               {profiles.map((p) => (
-                <ProfilePanel key={p.id} profile={p} />
+                <Fragment key={p.id}>
+                  <ProfilePanel profile={p} />
+                  {!!p.accounts?.length && <Posts profileId={p.id} />}
+                </Fragment>
               ))}
             </div>
             <div className="grid min-w-0 grid-cols-1 gap-4">

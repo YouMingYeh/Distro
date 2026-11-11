@@ -6,7 +6,7 @@ import { darkugcCallback } from "./darkugc";
 import { videoFile } from "./inference";
 import { KEY_NAMES, keysLinkWorkspace, saveKeys, userKeys } from "./keys";
 import { KEY_SERVICES } from "./scrapers";
-import { connectUrl, listAccounts } from "./zernio";
+import { connectUrl, listAccounts, listPosts } from "./zernio";
 
 const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -130,13 +130,27 @@ async function signOut(req: Request): Promise<Response> {
 }
 
 /** What the site's header and dashboard show. Readable by the site only, with the session cookie. */
+const siteHeaders = () => ({
+  "Access-Control-Allow-Origin": env.WEB_ORIGIN,
+  "Access-Control-Allow-Credentials": "true",
+  "Cache-Control": "no-store",
+  Vary: "Origin",
+});
+
+/** One profile's posts and metrics for the dashboard. Separate from /me so the header never waits on it. */
+async function mePosts(req: Request, url: URL): Promise<Response> {
+  const headers = siteHeaders();
+  const ws = env.CLERK_ISSUER ? await workspace(req) : null;
+  if (!ws) return Response.json({ error: "Not signed in." }, { status: 401, headers });
+  const profile = (await readProfiles(ws.id)).find((p) => p.id === url.searchParams.get("profile"));
+  if (!profile) return Response.json({ error: "No such profile." }, { status: 404, headers });
+  // null means Zernio could not be asked, as in /me.
+  const posts = profile.zernio_id ? await listPosts(profile.zernio_id).catch(() => null) : [];
+  return Response.json({ posts }, { headers });
+}
+
 async function me(req: Request): Promise<Response> {
-  const headers = {
-    "Access-Control-Allow-Origin": env.WEB_ORIGIN,
-    "Access-Control-Allow-Credentials": "true",
-    "Cache-Control": "no-store",
-    Vary: "Origin",
-  };
+  const headers = siteHeaders();
   if (!env.CLERK_ISSUER) return Response.json({ sign_in: false }, { headers });
   const ws = await workspace(req);
   if (!ws) return Response.json({ sign_in: true, signed_in: false }, { headers });
@@ -337,6 +351,7 @@ export const authHandler = {
     if (url.pathname === "/signin") return signInStart(req);
     if (url.pathname === "/signout") return signOut(req);
     if (url.pathname === "/me" && req.method === "GET") return me(req);
+    if (url.pathname === "/me/posts" && req.method === "GET") return mePosts(req, url);
     if (url.pathname === "/connect/callback") return connectCallback(url);
     if (url.pathname === "/darkugc/callback") return darkugcReturn(url);
     if (url.pathname === "/ads/callback") return adsReturn(url);

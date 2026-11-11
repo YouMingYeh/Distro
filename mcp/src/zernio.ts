@@ -40,6 +40,38 @@ export async function listAccounts(zernioId: string) {
   return accounts.map((a) => ({ account_id: a._id, platform: a.platform, username: a.username, active: a.isActive }));
 }
 
+type AnalyticsPost = {
+  _id: string;
+  platform?: string;
+  content?: string;
+  publishedAt?: string;
+  platformPostUrl?: string;
+  thumbnailUrl?: string;
+  platforms?: { accountUsername?: string }[];
+  analytics?: { views?: number | null; likes?: number | null; comments?: number | null; shares?: number | null };
+};
+
+/**
+ * A profile's published posts with their metrics, newest first. Includes posts made outside Distro.
+ * ponytail: one page of 50 from Zernio's default 90-day window; page through it if anyone posts more.
+ */
+export async function listPosts(zernioId: string) {
+  const { posts } = await call<{ posts: AnalyticsPost[] }>(`/analytics?profileId=${zernioId}&limit=50&sortBy=date&order=desc`);
+  return posts.map((p) => ({
+    id: p._id,
+    platform: p.platform,
+    username: p.platforms?.[0]?.accountUsername,
+    caption: p.content?.slice(0, 200),
+    published: p.publishedAt,
+    url: p.platformPostUrl,
+    thumbnail: p.thumbnailUrl,
+    views: p.analytics?.views ?? 0,
+    likes: p.analytics?.likes ?? 0,
+    comments: p.analytics?.comments ?? 0,
+    shares: p.analytics?.shares ?? 0,
+  }));
+}
+
 export async function createPost(payload: unknown) {
   return call<{ post?: { _id?: string; status?: string } }>("/posts", { method: "POST", body: JSON.stringify(payload) });
 }
