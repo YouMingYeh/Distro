@@ -1,0 +1,16 @@
+# internal, never ship
+HACKATHON_BRIEF.md
+
+# secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# tooling
+.serena/
+.claude/settings.local.json
+node_modules/
+.wrangler/
+dist/
+.DS_Store
